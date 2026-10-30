@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=post-planner
+Exec=post-planner
+Icon=post-planner
+Categories=Development;
+Terminal=false
+Keywords=wails
+Version=1.0
+StartupNotify=false

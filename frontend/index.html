@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+    <title>Notes</title>
+</head>
+<body>
+<div class="app" id="app">
+    <aside class="sidebar">
+        <header class="sidebar-head">
+            <div class="brand">
+                <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                </svg>
+                <span>Notes</span>
+            </div>
+            <div class="sidebar-actions">
+                <button class="icon-btn" id="import-note" title="Import Markdown files" aria-label="Import Markdown files">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                </button>
+                <button class="icon-btn accent" id="new-note" title="New note (Ctrl/Cmd + N)" aria-label="New note">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </button>
+            </div>
+        </header>
+
+        <div class="search">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.65" y2="16.65"/></svg>
+            <input id="search" type="text" placeholder="Search notes" autocomplete="off" spellcheck="false" aria-label="Search notes"/>
+            <button class="search-clear" id="search-clear" aria-label="Clear search" hidden>&times;</button>
+        </div>
+
+        <nav class="note-list-wrap">
+            <ul class="note-list" id="note-list"></ul>
+            <p class="list-empty" id="list-empty" hidden>No notes match your search.</p>
+        </nav>
+
+        <footer class="sidebar-foot">
+            <span id="notes-count">0 notes</span>
+            <button class="icon-btn subtle" id="open-folder" title="Show notes folder path" aria-label="Show notes folder path">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            </button>
+        </footer>
+    </aside>
+
+    <main class="workspace" id="workspace">
+        <header class="topbar">
+            <input id="note-title" class="title-input" type="text" placeholder="Untitled note" spellcheck="false" autocomplete="off" aria-label="Note title" disabled/>
+            <div class="topbar-actions">
+                <span class="save-status" id="save-status" aria-live="polite"></span>
+                <div class="segmented" id="view-toggle" role="group" aria-label="View mode">
+                    <button type="button" data-mode="edit">Write</button>
+                    <button type="button" data-mode="split" class="is-active">Split</button>
+                    <button type="button" data-mode="preview">Read</button>
+                </div>
+                <button class="icon-btn" id="publish-note" title="Publish note (Ctrl/Cmd + Shift + P)" aria-label="Publish note" disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </button>
+                <button class="icon-btn" id="export-note" title="Export or print notes (Ctrl/Cmd + Shift + E)" aria-label="Export or print notes">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </button>
+                <button class="icon-btn danger" id="delete-note" title="Delete note" aria-label="Delete note" disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                </button>
+            </div>
+        </header>
+
+        <div class="editor-shell" id="editor-shell">
+            <section class="editor-pane">
+                <div class="md-toolbar" id="md-toolbar" aria-label="Markdown formatting">
+                    <button type="button" data-action="bold" title="Bold (Ctrl/Cmd + B)"><b>B</b></button>
+                    <button type="button" data-action="italic" title="Italic (Ctrl/Cmd + I)"><i>I</i></button>
+                    <button type="button" data-action="strike" title="Strikethrough"><s>S</s></button>
+                    <span class="toolbar-sep"></span>
+                    <button type="button" data-action="h1" title="Heading 1">H1</button>
+                    <button type="button" data-action="h2" title="Heading 2">H2</button>
+                    <span class="toolbar-sep"></span>
+                    <button type="button" data-action="quote" title="Blockquote">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 21c3 0 7-1 7-8V5H3v7h4c0 4-2 5-4 5zM14 21c3 0 7-1 7-8V5h-7v7h4c0 4-2 5-4 5z"/></svg>
+                    </button>
+                    <button type="button" data-action="ul" title="Bullet list">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4.5" cy="6" r="1" fill="currentColor"/><circle cx="4.5" cy="12" r="1" fill="currentColor"/><circle cx="4.5" cy="18" r="1" fill="currentColor"/></svg>
+                    </button>
+                    <button type="button" data-action="task" title="Task list">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 8 9 4"/><line x1="12" y1="6" x2="21" y2="6"/><polyline points="3 17 5 19 9 15"/><line x1="12" y1="17" x2="21" y2="17"/></svg>
+                    </button>
+                    <span class="toolbar-sep"></span>
+                    <button type="button" data-action="code" title="Inline code">&lt;/&gt;</button>
+                    <button type="button" data-action="codeblock" title="Code block">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                    </button>
+                    <button type="button" data-action="link" title="Link (Ctrl/Cmd + K)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                    </button>
+                    <button type="button" data-action="table" title="Table">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="9" x2="9" y2="21"/></svg>
+                    </button>
+                </div>
+                <textarea id="editor" class="editor" placeholder="Start writing in Markdown…" spellcheck="true" disabled></textarea>
+            </section>
+
+            <section class="preview-pane">
+                <article id="preview" class="markdown-body" aria-label="Preview"></article>
+            </section>
+        </div>
+
+        <footer class="statusbar">
+            <span id="word-count">0 words</span>
+            <span class="dot">·</span>
+            <span id="char-count">0 characters</span>
+            <span class="spacer"></span>
+            <span id="markdown-badge">Markdown</span>
+        </footer>
+
+        <div class="empty-state" id="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="8" y1="13" x2="16" y2="13"/>
+                <line x1="8" y1="17" x2="13" y2="17"/>
+            </svg>
+            <h2>No note selected</h2>
+            <p>Pick a note from the sidebar or create a new one to start writing.</p>
+            <button class="btn primary" id="empty-new">New note</button>
+        </div>
+    </main>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<div class="modal-backdrop" id="confirm-modal" hidden>
+    <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+        <div class="modal-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <h2 id="confirm-title">Delete note</h2>
+        <p id="confirm-message"></p>
+        <div class="modal-actions">
+            <button type="button" class="btn" id="confirm-cancel">Cancel</button>
+            <button type="button" class="btn danger" id="confirm-delete">Delete</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="export-modal" hidden>
+    <div class="modal modal-export" role="dialog" aria-modal="true" aria-labelledby="export-title">
+        <h2 id="export-title">Export notes</h2>
+        <p class="modal-sub">Choose the notes to include, then pick a format.</p>
+
+        <div class="export-toolbar">
+            <label class="check-all">
+                <input type="checkbox" id="export-select-all" checked/>
+                <span>Select all</span>
+            </label>
+            <span class="export-count" id="export-count">0 selected</span>
+        </div>
+
+        <ul class="export-list" id="export-list"></ul>
+
+        <fieldset class="export-formats" id="export-formats">
+            <legend>Format</legend>
+
+            <label class="format-option is-selected">
+                <input type="radio" name="export-format" value="markdown" checked/>
+                <span class="format-text">
+                    <span class="format-label">Markdown</span>
+                    <span class="format-hint">Original <code>.md</code> source. Multiple notes are bundled into a <code>.zip</code>.</span>
+                </span>
+            </label>
+
+            <label class="format-option">
+                <input type="radio" name="export-format" value="html"/>
+                <span class="format-text">
+                    <span class="format-label">HTML</span>
+                    <span class="format-hint">Rendered, self-contained pages. Multiple notes are bundled into a <code>.zip</code>.</span>
+                </span>
+            </label>
+
+            <label class="format-option">
+                <input type="radio" name="export-format" value="print"/>
+                <span class="format-text">
+                    <span class="format-label">Print / PDF</span>
+                    <span class="format-hint">Opens the system print dialog for the selected notes.</span>
+                </span>
+            </label>
+        </fieldset>
+
+        <div class="modal-actions">
+            <button type="button" class="btn" id="export-cancel">Cancel</button>
+            <button type="button" class="btn primary" id="export-confirm">Export</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="publish-modal" hidden>
+    <div class="modal modal-publish" role="dialog" aria-modal="true" aria-labelledby="publish-title">
+        <h2 id="publish-title">Publish note</h2>
+        <p class="modal-sub" id="publish-sub">Turn this note into a post. Nothing leaves your computer until you paste it.</p>
+
+        <div class="publish-tabs" id="publish-tabs" role="tablist" aria-label="Publish target">
+            <button type="button" role="tab" data-platform="x" class="is-active" aria-selected="true">X / Twitter</button>
+            <button type="button" role="tab" data-platform="linkedin" aria-selected="false">LinkedIn</button>
+            <button type="button" role="tab" data-platform="devto" aria-selected="false">dev.to</button>
+            <button type="button" role="tab" data-platform="hashnode" aria-selected="false">Hashnode</button>
+        </div>
+
+        <div class="publish-social" id="publish-social">
+            <label class="publish-link">
+                <span>Link to include <em>(optional)</em></span>
+                <input id="publish-link" type="text" placeholder="https://your-blog.com/my-post" spellcheck="false" autocomplete="off"/>
+            </label>
+
+            <div class="publish-chooser" id="publish-chooser" hidden>
+                <p class="publish-chooser-title">This note is longer than one post.</p>
+                <div class="segmented publish-mode" id="publish-mode" role="group" aria-label="How to post">
+                    <button type="button" data-mode="thread" class="is-active">Thread</button>
+                    <button type="button" data-mode="single">Single post</button>
+                </div>
+                <label class="publish-number" id="publish-number-wrap">
+                    <input type="checkbox" id="publish-number"/>
+                    <span>Number parts (1/n)</span>
+                </label>
+            </div>
+
+            <div class="publish-field">
+                <div class="publish-field-head">
+                    <span class="publish-label" id="publish-field-label">Post</span>
+                    <span class="publish-counter" id="publish-counter" aria-live="polite">0 / 280</span>
+                </div>
+                <textarea id="publish-text" class="publish-text" spellcheck="true"></textarea>
+                <div class="publish-parts" id="publish-parts" hidden></div>
+                <p class="publish-hint" id="publish-hint" hidden>Copy each part in order, or use the copy buttons.</p>
+            </div>
+
+            <p class="publish-hook" id="publish-hook" hidden></p>
+        </div>
+
+        <div class="publish-blog" id="publish-blog" hidden>
+            <div class="publish-connect" id="publish-connect" hidden>
+                <p class="publish-connect-title" id="publish-connect-title"></p>
+                <p class="publish-connect-help" id="publish-connect-help"></p>
+                <div class="publish-connect-row">
+                    <input id="publish-secret" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your API key"/>
+                    <button type="button" class="btn primary" id="publish-connect-btn">Connect</button>
+                </div>
+                <p class="publish-connect-note" id="publish-connect-note" hidden></p>
+            </div>
+
+            <div class="publish-connected" id="publish-connected" hidden>
+                <div class="publish-account-row">
+                    <span class="publish-account" id="publish-account"></span>
+                    <button type="button" class="link-btn" id="publish-disconnect">Disconnect</button>
+                </div>
+                <p class="publish-note" id="publish-storage-note" hidden></p>
+
+                <label class="publish-blog-field" id="publish-publication-wrap" hidden>
+                    <span>Publication</span>
+                    <select id="publish-publication"></select>
+                </label>
+
+                <div class="publish-status" id="publish-status" hidden>
+                    <div class="publish-status-line">
+                        <span class="publish-status-badge" id="publish-status-badge"></span>
+                        <span class="publish-status-time" id="publish-status-time"></span>
+                    </div>
+                    <div class="publish-status-actions">
+                        <button type="button" class="link-btn" id="publish-status-view" hidden>View post</button>
+                        <button type="button" class="link-btn danger-text" id="publish-status-unlink">Unlink</button>
+                    </div>
+                </div>
+
+                <label class="publish-blog-field">
+                    <span>Title</span>
+                    <input id="publish-blog-title" type="text"/>
+                </label>
+                <label class="publish-blog-field">
+                    <span>Body (Markdown)</span>
+                    <textarea id="publish-blog-body" spellcheck="true"></textarea>
+                </label>
+                <label class="publish-blog-field">
+                    <span>Tags</span>
+                    <input id="publish-blog-tags" type="text" placeholder="go, wails, markdown" spellcheck="false"/>
+                </label>
+                <label class="publish-blog-field">
+                    <span>Canonical URL <em>(optional)</em></span>
+                    <input id="publish-blog-canonical" type="text" placeholder="https://your-blog.com/my-post" spellcheck="false"/>
+                </label>
+            </div>
+        </div>
+
+        <ul class="publish-warnings" id="publish-warnings" hidden></ul>
+        <p class="publish-notice" id="publish-notice" hidden></p>
+        <p class="publish-error" id="publish-error" hidden></p>
+
+        <div class="modal-actions">
+            <button type="button" class="btn" id="publish-cancel">Cancel</button>
+            <button type="button" class="btn" id="publish-copy">Copy</button>
+            <button type="button" class="btn primary" id="publish-open">Open X</button>
+            <button type="button" class="btn" id="publish-save-draft" hidden>Save draft</button>
+            <button type="button" class="btn primary" id="publish-submit" hidden>Publish</button>
+        </div>
+    </div>
+</div>
+
+<div id="print-root" aria-hidden="true"></div>
+
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
