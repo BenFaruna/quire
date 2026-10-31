@@ -28,6 +28,7 @@ const openFolderButton = document.getElementById("open-folder") as HTMLButtonEle
 const titleInput = document.getElementById("note-title") as HTMLInputElement;
 const editor = document.getElementById("editor") as HTMLTextAreaElement;
 const preview = document.getElementById("preview") as HTMLElement;
+const previewPane = document.querySelector(".preview-pane") as HTMLElement;
 const saveStatus = document.getElementById("save-status") as HTMLSpanElement;
 const deleteButton = document.getElementById("delete-note") as HTMLButtonElement;
 const exportButton = document.getElementById("export-note") as HTMLButtonElement;
@@ -872,6 +873,10 @@ async function renderPreview() {
         if (seq !== previewSeq) return;
         preview.innerHTML = html;
         decoratePreview();
+        if (app.dataset.mode === "split") {
+            scrollSource = null;
+            syncScroll(editor, previewPane);
+        }
     } catch (err) {
         if (seq === previewSeq) reportError("Could not render Markdown", err);
     }
@@ -1036,7 +1041,13 @@ function applyViewMode() {
     for (const button of viewToggle.querySelectorAll<HTMLButtonElement>("button")) {
         button.classList.toggle("is-active", button.dataset.mode === effective);
     }
-    if (effective !== "edit") void renderPreview();
+    if (effective === "edit") return;
+    void renderPreview().then(() => {
+        if (app.dataset.mode === "split") {
+            scrollSource = null;
+            syncScroll(editor, previewPane);
+        }
+    });
 }
 
 function setMode(mode: ViewMode) {
@@ -1059,6 +1070,35 @@ viewToggle.addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-mode]");
     if (button) setMode(button.dataset.mode as ViewMode);
 });
+
+// ---------------------------------------------------------------------------
+// Split scroll sync
+// ---------------------------------------------------------------------------
+
+let scrollSource: HTMLElement | null = null;
+let scrollSourceTimer: ReturnType<typeof setTimeout> | undefined;
+
+// Proportional sync: both panes map 0..1 of their scrollable range onto each
+// other. It is cheap, survives re-renders, and stays correct when the two
+// panes have different heights (code blocks, images, padding).
+function syncScroll(from: HTMLElement, to: HTMLElement) {
+    if (app.dataset.mode !== "split") return;
+    // Ignore the scroll event caused by assigning scrollTop on the other pane.
+    if (scrollSource && scrollSource !== from) return;
+    const fromMax = from.scrollHeight - from.clientHeight;
+    const toMax = to.scrollHeight - to.clientHeight;
+    if (fromMax <= 0 || toMax <= 0) return;
+    const ratio = Math.min(1, Math.max(0, from.scrollTop / fromMax));
+    scrollSource = from;
+    to.scrollTop = ratio * toMax;
+    clearTimeout(scrollSourceTimer);
+    scrollSourceTimer = setTimeout(() => {
+        scrollSource = null;
+    }, 100);
+}
+
+editor.addEventListener("scroll", () => syncScroll(editor, previewPane), { passive: true });
+previewPane.addEventListener("scroll", () => syncScroll(previewPane, editor), { passive: true });
 
 // Sidebar toggles are rendered both by the shell and by the planner, so use
 // event delegation rather than binding each button.
