@@ -34,6 +34,13 @@ const exportButton = document.getElementById("export-note") as HTMLButtonElement
 const publishButton = document.getElementById("publish-note") as HTMLButtonElement;
 const scheduleButton = document.getElementById("schedule-note") as HTMLButtonElement;
 const screenToggle = document.getElementById("screen-toggle") as HTMLDivElement;
+const sidebar = document.getElementById("sidebar") as HTMLElement;
+const sidebarBackdrop = document.getElementById("sidebar-backdrop") as HTMLDivElement;
+const workspace = document.getElementById("workspace") as HTMLElement;
+const topbarMore = document.getElementById("topbar-more") as HTMLButtonElement;
+const topbarMenu = document.getElementById("topbar-menu") as HTMLDivElement;
+const menuExport = document.getElementById("menu-export") as HTMLButtonElement;
+const menuDelete = document.getElementById("menu-delete") as HTMLButtonElement;
 const plannerView = document.getElementById("planner-view") as HTMLElement;
 const exportModal = document.getElementById("export-modal") as HTMLDivElement;
 const exportList = document.getElementById("export-list") as HTMLUListElement;
@@ -74,6 +81,9 @@ let confirmReturnFocus: HTMLElement | null = null;
 type ViewMode = "edit" | "split" | "preview";
 type Screen = "notes" | "queue" | "calendar";
 
+const MOBILE_QUERY = "(max-width: 760px)";
+const SPLIT_QUERY = "(min-width: 761px)";
+
 const MODE_KEY = "notes.viewMode";
 const LAST_NOTE_KEY = "notes.lastId";
 const COLLAPSED_KEY = "notes.collapsedStatuses";
@@ -93,6 +103,9 @@ const STATUS_LABEL: Record<string, string> = {
 let screen: Screen = "notes";
 let statuses: Record<string, string> | null = null;
 let collapsedStatuses = new Set<string>();
+let preferredMode: ViewMode = "split";
+const mobileQuery = window.matchMedia(MOBILE_QUERY);
+const splitQuery = window.matchMedia(SPLIT_QUERY);
 
 // Webviews occasionally restrict localStorage; never let that break the app.
 const storage = {
@@ -203,6 +216,91 @@ function updateStats() {
 
 function setBusy(busy: boolean) {
     app.classList.toggle("is-busy", busy);
+}
+
+// ---------------------------------------------------------------------------
+// Mobile drawer and topbar menu
+// ---------------------------------------------------------------------------
+
+let sidebarReturnFocus: HTMLElement | null = null;
+
+function isMobileViewport(): boolean {
+    return mobileQuery.matches;
+}
+
+function sidebarOpen(): boolean {
+    return app.classList.contains("is-sidebar-open");
+}
+
+function syncSidebarAria(open: boolean) {
+    for (const button of document.querySelectorAll<HTMLElement>("[data-sidebar-toggle]")) {
+        if (button.id === "sidebar-close") continue;
+        button.setAttribute("aria-expanded", String(open));
+    }
+}
+
+function syncSidebarInert() {
+    if (isMobileViewport() && !sidebarOpen()) {
+        sidebar.setAttribute("inert", "");
+    } else {
+        sidebar.removeAttribute("inert");
+    }
+}
+
+function openSidebar() {
+    if (!isMobileViewport() || sidebarOpen()) return;
+    sidebarReturnFocus = document.activeElement as HTMLElement | null;
+    closeTopbarMenu();
+    app.classList.add("is-sidebar-open");
+    sidebarBackdrop.hidden = false;
+    workspace.setAttribute("inert", "");
+    syncSidebarAria(true);
+    syncSidebarInert();
+    document.getElementById("sidebar-close")?.focus();
+}
+
+function closeSidebar(restoreFocus = false) {
+    if (!sidebarOpen()) return;
+    app.classList.remove("is-sidebar-open");
+    sidebarBackdrop.hidden = true;
+    workspace.removeAttribute("inert");
+    syncSidebarAria(false);
+    syncSidebarInert();
+    const target = sidebarReturnFocus;
+    sidebarReturnFocus = null;
+    if (restoreFocus) target?.focus();
+}
+
+function toggleSidebar() {
+    if (sidebarOpen()) {
+        closeSidebar(true);
+    } else {
+        openSidebar();
+    }
+}
+
+function closeTopbarMenu(restoreFocus = false) {
+    if (topbarMenu.hidden) return;
+    topbarMenu.hidden = true;
+    topbarMore.setAttribute("aria-expanded", "false");
+    if (restoreFocus) topbarMore.focus();
+}
+
+function toggleTopbarMenu() {
+    const open = topbarMenu.hidden;
+    if (open) closeSidebar();
+    topbarMenu.hidden = !open;
+    topbarMore.setAttribute("aria-expanded", String(open));
+    if (open) topbarMenu.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+}
+
+function syncLayout() {
+    if (!isMobileViewport()) {
+        closeSidebar(false);
+        sidebarBackdrop.hidden = true;
+    }
+    syncSidebarInert();
+    closeTopbarMenu(false);
 }
 
 // ---------------------------------------------------------------------------
@@ -357,6 +455,7 @@ function setEditorEnabled(enabled: boolean) {
     titleInput.disabled = !enabled;
     editor.disabled = !enabled;
     deleteButton.disabled = !enabled;
+    menuDelete.disabled = !enabled;
     publishButton.disabled = !enabled;
     scheduleButton.disabled = !enabled;
     emptyState.hidden = enabled;
@@ -364,7 +463,10 @@ function setEditorEnabled(enabled: boolean) {
 }
 
 async function selectNote(id: string, options: { force?: boolean } = {}) {
-    if (!options.force && id === activeId) return;
+    if (!options.force && id === activeId) {
+        if (isMobileViewport()) closeSidebar();
+        return;
+    }
     await flushSave();
 
     const token = ++selectSeq;
@@ -384,6 +486,7 @@ async function selectNote(id: string, options: { force?: boolean } = {}) {
         renderList();
         storage.set(LAST_NOTE_KEY, id);
         await renderPreview();
+        if (isMobileViewport()) closeSidebar();
     } catch (err) {
         reportError("Could not open note", err);
     } finally {
@@ -707,6 +810,8 @@ async function deleteNote() {
 
 function setScreen(next: Screen) {
     if (next !== "notes") void flushSave();
+    closeSidebar(false);
+    closeTopbarMenu(false);
     screen = next;
     app.dataset.screen = next;
     for (const button of screenToggle.querySelectorAll<HTMLButtonElement>("button")) {
@@ -924,24 +1029,85 @@ toolbar.addEventListener("click", (event) => {
 // View mode
 // ---------------------------------------------------------------------------
 
-function setMode(mode: ViewMode) {
-    app.dataset.mode = mode;
+function applyViewMode() {
+    const effective: ViewMode =
+        preferredMode === "split" && !splitQuery.matches ? "edit" : preferredMode;
+    app.dataset.mode = effective;
     for (const button of viewToggle.querySelectorAll<HTMLButtonElement>("button")) {
-        button.classList.toggle("is-active", button.dataset.mode === mode);
+        button.classList.toggle("is-active", button.dataset.mode === effective);
     }
+    if (effective !== "edit") void renderPreview();
+}
+
+function setMode(mode: ViewMode) {
+    if (mode === "split" && !splitQuery.matches) return;
+    preferredMode = mode;
     storage.set(MODE_KEY, mode);
-    if (mode !== "edit") void renderPreview();
+    applyViewMode();
 }
 
 function cycleMode() {
-    const modes: ViewMode[] = ["edit", "split", "preview"];
-    const current = (app.dataset.mode as ViewMode) || "split";
-    setMode(modes[(modes.indexOf(current) + 1) % modes.length]);
+    const modes: ViewMode[] = splitQuery.matches
+        ? ["edit", "split", "preview"]
+        : ["edit", "preview"];
+    const current = (app.dataset.mode as ViewMode) || "edit";
+    const index = modes.indexOf(current);
+    setMode(modes[(index + 1) % modes.length]);
 }
 
 viewToggle.addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-mode]");
     if (button) setMode(button.dataset.mode as ViewMode);
+});
+
+// Sidebar toggles are rendered both by the shell and by the planner, so use
+// event delegation rather than binding each button.
+document.addEventListener("click", (event) => {
+    const toggle = (event.target as HTMLElement).closest<HTMLElement>("[data-sidebar-toggle]");
+    if (toggle) {
+        event.preventDefault();
+        toggleSidebar();
+        return;
+    }
+    if (!topbarMenu.hidden && !topbarMenu.contains(event.target as Node) && event.target !== topbarMore) {
+        closeTopbarMenu(false);
+    }
+});
+
+sidebarBackdrop.addEventListener("click", () => closeSidebar(true));
+
+topbarMore.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleTopbarMenu();
+});
+
+topbarMenu.addEventListener("click", (event) => event.stopPropagation());
+
+menuExport.addEventListener("click", () => {
+    closeTopbarMenu(false);
+    openExport();
+});
+
+menuDelete.addEventListener("click", () => {
+    closeTopbarMenu(false);
+    void deleteNote();
+});
+
+function onMediaChange(query: MediaQueryList, handler: () => void) {
+    if (typeof query.addEventListener === "function") {
+        query.addEventListener("change", handler);
+    } else {
+        query.addListener(handler);
+    }
+}
+
+onMediaChange(splitQuery, applyViewMode);
+onMediaChange(mobileQuery, syncLayout);
+
+window.addEventListener("resize", () => {
+    // Media-query events cover the breakpoint flips; this keeps the drawer
+    // state honest when a webview misses the event.
+    if (!isMobileViewport()) syncLayout();
 });
 
 // ---------------------------------------------------------------------------
@@ -1045,6 +1211,21 @@ preview.addEventListener("change", (event) => {
 });
 
 document.addEventListener("keydown", (event) => {
+    // The drawer and mobile menu sit above the editor, so Escape closes them
+    // before any other surface gets a chance to react.
+    if (event.key === "Escape") {
+        if (sidebarOpen()) {
+            event.preventDefault();
+            closeSidebar(true);
+            return;
+        }
+        if (!topbarMenu.hidden) {
+            event.preventDefault();
+            closeTopbarMenu(true);
+            return;
+        }
+    }
+
     // The publish dialog owns the keyboard while it is open.
     if (isPublishOpen()) return;
 
@@ -1132,7 +1313,15 @@ window.addEventListener("blur", () => void flushSave());
 // ---------------------------------------------------------------------------
 
 async function boot() {
-    setMode((storage.get(MODE_KEY) as ViewMode) || "split");
+    const storedMode = storage.get(MODE_KEY);
+    preferredMode =
+        storedMode === "edit" || storedMode === "split" || storedMode === "preview"
+            ? storedMode
+            : "split";
+    applyViewMode();
+    syncSidebarAria(false);
+    syncSidebarInert();
+    closeTopbarMenu(false);
     setEditorEnabled(false);
     updateStats();
     collapsedStatuses = new Set(loadCollapsedStatuses());

@@ -637,3 +637,100 @@
     display: flex;
     gap: 6px;
 }
+
+/* Mobile planner ---------------------------------------------------------- */
+
+@media (max-width: 760px) {
+    .planner-toolbar {
+        gap: 8px;
+        padding: 10px 12px;
+        padding-top: max(10px, env(safe-area-inset-top));
+    }
+
+    .planner-title {
+        font-size: 17px;
+    }
+
+    .planner-toolbar .icon-btn,
+    .planner-toolbar .action-chip {
+        min-height: 38px;
+    }
+
+    .planner-scroll {
+        padding: 12px;
+    }
+
+    .queue-row {
+        gap: 8px;
+        padding: 10px;
+    }
+
+    .queue-menu-btn {
+        width: 34px;
+        height: 34px;
+    }
+
+    .queue-time {
+        width: 40px;
+        font-size: 11px;
+    }
+
+    .queue-filters {
+        flex-wrap: wrap;
+    }
+
+    .calendar-grid {
+        grid-auto-rows: minmax(52px, 1fr);
+        gap: 3px;
+    }
+
+    .calendar-cell {
+        gap: 2px;
+        padding: 3px;
+    }
+
+    .calendar-weekday {
+        padding: 0 1px;
+        font-size: 9px;
+        letter-spacing: 0.02em;
+    }
+
+    .calendar-daynum {
+        min-width: 22px;
+        min-height: 22px;
+        padding: 0 4px;
+        font-size: 10.5px;
+    }
+
+    /* Chips become short, tappable bars; the day number opens the day queue. */
+    .calendar-chip {
+        height: 5px;
+        min-height: 5px;
+        padding: 0;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: transparent;
+        font-size: 0;
+        overflow: hidden;
+    }
+
+    .calendar-chip:hover {
+        background: var(--accent);
+    }
+
+    .calendar-more {
+        padding: 0 2px;
+        font-size: 9px;
+    }
+
+    .plan-popover {
+        width: min(300px, calc(100vw - 16px));
+    }
+
+    .due-banner {
+        right: 12px;
+        bottom: max(12px, env(safe-area-inset-bottom));
+        left: 12px;
+        width: auto;
+    }
+}

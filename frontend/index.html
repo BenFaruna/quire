@@ -7,7 +7,7 @@
 </head>
 <body>
 <div class="app" id="app">
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
         <header class="sidebar-head">
             <div class="brand">
                 <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -17,6 +17,9 @@
                 <span>Notes</span>
             </div>
             <div class="sidebar-actions">
+                <button class="icon-btn mobile-only" id="sidebar-close" data-sidebar-toggle title="Close notes list" aria-label="Close notes list">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
                 <button class="icon-btn" id="import-note" title="Import Markdown files" aria-label="Import Markdown files">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 </button>
@@ -50,9 +53,13 @@
             </button>
         </footer>
     </aside>
+    <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
 
     <main class="workspace" id="workspace">
         <header class="topbar">
+            <button class="icon-btn mobile-only" id="sidebar-toggle" data-sidebar-toggle title="Notes list" aria-label="Open notes list" aria-controls="sidebar" aria-expanded="false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
             <input id="note-title" class="title-input" type="text" placeholder="Untitled note" spellcheck="false" autocomplete="off" aria-label="Note title" disabled/>
             <div class="topbar-actions">
                 <span class="save-status" id="save-status" aria-live="polite"></span>
@@ -73,6 +80,13 @@
                 <button class="icon-btn danger" id="delete-note" title="Delete note" aria-label="Delete note" disabled>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
                 </button>
+                <button class="icon-btn mobile-only" id="topbar-more" title="More actions" aria-label="More actions" aria-haspopup="menu" aria-expanded="false">
+                    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                </button>
+                <div class="topbar-menu" id="topbar-menu" role="menu" aria-label="More actions" hidden>
+                    <button type="button" role="menuitem" id="menu-export">Export or print</button>
+                    <button type="button" role="menuitem" id="menu-delete" class="danger">Delete note</button>
+                </div>
             </div>
         </header>
 

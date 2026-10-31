@@ -187,6 +187,17 @@ function shell(title: string): { toolbar: HTMLElement; scroll: HTMLElement } {
     view.replaceChildren();
 
     const toolbar = el("div", "planner-toolbar");
+    // The desktop sidebar is a drawer on mobile, so the planner screens need
+    // their own way back to the note list and the screen switcher.
+    const menu = el("button", "icon-btn mobile-only");
+    menu.type = "button";
+    menu.textContent = "☰";
+    menu.dataset.sidebarToggle = "";
+    menu.title = "Notes list";
+    menu.setAttribute("aria-label", "Open notes list");
+    menu.setAttribute("aria-controls", "sidebar");
+    menu.setAttribute("aria-expanded", "false");
+    toolbar.append(menu);
     toolbar.append(text("h1", "planner-title", title));
     toolbar.append(el("div", "spacer"));
     view.append(toolbar);
@@ -637,6 +648,10 @@ async function renderCalendar(): Promise<void> {
         cell.classList.toggle("is-today", key === todayKey);
         cell.classList.toggle("is-selected", key === selectedDay);
         cell.dataset.date = key;
+        cell.addEventListener("click", (event) => {
+            if ((event.target as HTMLElement).closest("button, a")) return;
+            openDay(date.getTime());
+        });
 
         const dayNumber = el("button", "calendar-daynum");
         dayNumber.type = "button";

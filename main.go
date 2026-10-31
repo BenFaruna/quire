@@ -50,8 +50,8 @@ func main() {
 		Title:     "Notes",
 		Width:     1280,
 		Height:    820,
-		MinWidth:  860,
-		MinHeight: 560,
+		MinWidth:  380,
+		MinHeight: 520,
 		Mac: application.MacWindow{
 			InvisibleTitleBarHeight: 50,
 			Backdrop:                application.MacBackdropTranslucent,
