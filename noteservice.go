@@ -194,9 +194,10 @@ func (s *NotesService) Delete(id string) error {
 	if err := os.Remove(filepath.Join(s.root, id+".md")); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("delete note: %w", err)
 	}
-	// Tracking data is meaningless once the note is gone. Best-effort: a
-	// failure here must not block deleting the note itself.
+	// Tracking and planner data are meaningless once the note is gone.
+	// Best-effort: a failure here must not block deleting the note itself.
 	_ = deletePublishState(s.root, id)
+	_ = deletePlanState(s.root, id)
 	return nil
 }
 

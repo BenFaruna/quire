@@ -1,11 +1,13 @@
 import { Browser } from "@wailsio/runtime";
 import * as PublishService from "../bindings/post-planner/publishservice.js";
+import * as PlannerService from "../bindings/post-planner/plannerservice.js";
 import type {
     Draft,
     PrepareOptions,
     ProviderStatus,
     PublishRequest,
     PublishState,
+    Rendition,
 } from "../bindings/post-planner/models.js";
 
 // X and LinkedIn are local-only: the app shapes the text and hands it to the
@@ -21,6 +23,7 @@ interface Source {
     id: string;
     title: string;
     body: string;
+    slotId?: string;
 }
 
 interface BlogForm {
@@ -78,6 +81,8 @@ const copyButton = document.getElementById("publish-copy") as HTMLButtonElement;
 const openButton = document.getElementById("publish-open") as HTMLButtonElement;
 const saveDraftButton = document.getElementById("publish-save-draft") as HTMLButtonElement;
 const submitButton = document.getElementById("publish-submit") as HTMLButtonElement;
+const saveSlotButton = document.getElementById("publish-save-slot") as HTMLButtonElement;
+const regenerateButton = document.getElementById("publish-regenerate") as HTMLButtonElement;
 
 const LINK_KEY = "notes.publishLink";
 const CANONICAL_KEY = "notes.publishCanonical";
@@ -96,6 +101,20 @@ let returnFocus: HTMLElement | null = null;
 let prepareSeq = 0;
 let busy = false;
 let linkTimer: ReturnType<typeof setTimeout> | undefined;
+
+// A publish dialog opened from the reminder banner or a queue row carries the
+// slot it represents, so edits can be saved back as that slot's rendition.
+interface SlotContext {
+    noteId: string;
+    slotId: string;
+}
+
+let slotContext: SlotContext | null = null;
+let lockedPlatform: Platform | null = null;
+let renditions: Partial<Record<Platform, Rendition>> = {};
+let renditionCanonical: Partial<Record<Platform, string>> = {};
+let blogRenditionApplied = new Set<Platform>();
+let savedSnapshot = "";
 
 // localStorage can be unavailable in some webviews; never break the dialog.
 const storage = {
@@ -121,6 +140,10 @@ function isBlogPlatform(value: string): value is BlogPlatform {
 
 function isSocialPlatform(value: Platform): value is SocialPlatform {
     return value === "x" || value === "linkedin";
+}
+
+function isPlatform(value: string): value is Platform {
+    return value === "x" || value === "linkedin" || value === "devto" || value === "hashnode";
 }
 
 function platformName(value: Platform): string {
@@ -182,6 +205,12 @@ export function isPublishOpen(): boolean {
 
 export function openPublishModal(input: Source) {
     source = input;
+    slotContext = input.slotId ? { noteId: input.id, slotId: input.slotId } : null;
+    lockedPlatform = null;
+    renditions = {};
+    renditionCanonical = {};
+    blogRenditionApplied = new Set();
+    savedSnapshot = "";
     platform = "x";
     mode = "thread";
     numberThreads = false;
@@ -198,17 +227,210 @@ export function openPublishModal(input: Source) {
     hideMessages();
     syncTabs();
     syncMode();
+    syncSlotActions();
     modal.hidden = false;
-    void refresh(true);
+    if (slotContext) {
+        void loadSlotContext();
+    } else {
+        void refresh(true);
+    }
 }
 
-function closePublish() {
+function closePublish(discard = false) {
+    if (!discard && slotContext && slotDirty()) {
+        if (!window.confirm("Discard unsaved changes to this slot?")) return;
+    }
     modal.hidden = true;
+    slotContext = null;
+    lockedPlatform = null;
+    renditions = {};
+    renditionCanonical = {};
+    blogRenditionApplied = new Set();
+    savedSnapshot = "";
     draft = null;
     publishState = null;
     clearTimeout(linkTimer);
     returnFocus?.focus();
     returnFocus = null;
+}
+
+// Loads the selected slot so the dialog opens on its platform and prefills the
+// saved rendition, if there is one.
+async function loadSlotContext() {
+    const ctx = slotContext;
+    if (!ctx) return;
+    try {
+        const plan = await PlannerService.Plan(ctx.noteId);
+        const slot = plan?.slots?.find((candidate) => candidate.id === ctx.slotId) ?? null;
+        if (slot && isPlatform(slot.platform)) {
+            platform = slot.platform;
+            lockedPlatform = slot.platform;
+            if (slot.rendition) {
+                renditions[platform] = slot.rendition;
+                renditionCanonical[platform] = slot.rendition.canonical ?? "";
+                linkInput.value = slot.rendition.canonical ?? "";
+            }
+        }
+    } catch (err) {
+        showError(err);
+    }
+    syncTabs();
+    syncMode();
+    await refresh(true);
+    savedSnapshot = snapshot();
+    syncSlotActions();
+}
+
+// ---------------------------------------------------------------------------
+// Slot context (renditions)
+// ---------------------------------------------------------------------------
+
+function syncSlotActions() {
+    const hasSlot = Boolean(slotContext);
+    saveSlotButton.hidden = !hasSlot;
+    saveSlotButton.disabled = !hasSlot || busy;
+    const hasRendition = hasSlot && Boolean(renditions[platform]);
+    regenerateButton.hidden = !hasRendition;
+    regenerateButton.disabled = !hasRendition || busy;
+}
+
+// Applies a saved rendition over a freshly prepared draft. Social slots take
+// Text/Parts; blog slots take Title/Body/Tags. Both take Canonical.
+function applyRendition(value: Platform, next: Draft) {
+    const rendition = renditions[value];
+    if (!rendition) return;
+
+    if (isSocialPlatform(value)) {
+        if (rendition.parts && rendition.parts.length > 0) {
+            next.parts = rendition.parts;
+            next.overLimit = true;
+            mode = rendition.parts.length > 1 ? "thread" : "single";
+        }
+        if (rendition.text) {
+            next.text = rendition.text;
+        } else if (rendition.parts && rendition.parts.length > 0) {
+            next.text = rendition.parts.join("\n\n");
+        }
+        next.truncated = false;
+        return;
+    }
+
+    if (isBlogPlatform(value) && !blogRenditionApplied.has(value)) {
+        blogForms[value] = {
+            title: rendition.title || next.title,
+            body: rendition.body ?? next.body,
+            tags: (rendition.tags ?? []).join(", "),
+            canonical: rendition.canonical ?? "",
+        };
+        blogRenditionApplied.add(value);
+    }
+}
+
+// Reads the form currently on screen, in the same lane mapping the Go side
+// stores. SourceHash/EditedAt are filled in by SaveRendition.
+function buildRendition(): Rendition {
+    if (isSocialPlatform(platform)) {
+        const threaded = isThreaded();
+        const parts = threaded
+            ? Array.from(
+                  partsContainer.querySelectorAll<HTMLTextAreaElement>("textarea"),
+              )
+                  .map((area) => area.value.trim())
+                  .filter(Boolean)
+            : [];
+        return {
+            text: threaded ? "" : textArea.value,
+            parts,
+            canonical: linkInput.value.trim() || renditionCanonical[platform] || "",
+            sourceHash: "",
+            editedAt: 0,
+        };
+    }
+
+    const form = currentBlogForm();
+    return {
+        title: form?.title ?? "",
+        body: form?.body ?? "",
+        tags: readTags(form?.tags ?? ""),
+        canonical: form?.canonical?.trim() ?? "",
+        sourceHash: "",
+        editedAt: 0,
+    };
+}
+
+function snapshot(): string {
+    return JSON.stringify(buildRendition());
+}
+
+function slotDirty(): boolean {
+    if (!slotContext) return false;
+    return snapshot() !== savedSnapshot;
+}
+
+async function saveToSlot(notify = true): Promise<boolean> {
+    const ctx = slotContext;
+    if (!ctx) return false;
+    try {
+        const state = await PlannerService.SaveRendition(ctx.noteId, ctx.slotId, buildRendition());
+        const slot = state?.slots?.find((candidate) => candidate.id === ctx.slotId) ?? null;
+        if (slot?.rendition) {
+            renditions[platform] = slot.rendition;
+            renditionCanonical[platform] = slot.rendition.canonical ?? "";
+        }
+        savedSnapshot = snapshot();
+        syncSlotActions();
+        if (notify) showNotice("Saved to slot.");
+        return true;
+    } catch (err) {
+        showError(err);
+        return false;
+    }
+}
+
+// Copy, Open and Publish save first, so the queue never shows a stale draft
+// after the user has acted on it.
+async function ensureSlotSaved(): Promise<boolean> {
+    if (!slotContext || !slotDirty()) return true;
+    return saveToSlot(false);
+}
+
+function renderCurrent() {
+    if (isSocialPlatform(platform)) renderSocial();
+    else renderBlog();
+}
+
+async function regenerate() {
+    if (!slotContext) return;
+    if (slotDirty() && !window.confirm("Replace the edited draft with a fresh one from the note?")) {
+        return;
+    }
+    regenerateButton.disabled = true;
+    try {
+        const next = await PublishService.Prepare(
+            source.title,
+            source.body,
+            platform,
+            { mode: "auto", numberThreads: false, canonical: linkInput.value.trim() },
+        );
+        draft = next;
+        delete renditions[platform];
+        delete renditionCanonical[platform];
+        blogRenditionApplied.delete(platform);
+        if (isBlogPlatform(platform)) {
+            delete blogForms[platform];
+        }
+        if (isSocialPlatform(platform)) {
+            mode = "thread";
+        }
+        renderCurrent();
+        if (await saveToSlot(false)) {
+            showNotice("Regenerated from the note and saved to the slot.");
+        }
+    } catch (err) {
+        showError(err);
+    } finally {
+        syncSlotActions();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -219,7 +441,7 @@ async function loadConnections(force = false) {
     if (connectionsLoaded && !force) return;
     const list = await PublishService.Connections();
     connections = {};
-    for (const status of list) {
+    for (const status of list ?? []) {
         if (isBlogPlatform(status.platform)) {
             connections[status.platform] = status;
         }
@@ -246,6 +468,7 @@ async function refresh(focus = false) {
             );
             if (seq !== prepareSeq) return;
             draft = next;
+            applyRendition(platform, draft);
             renderSocial();
             if (focus) focusSocialEditor();
             return;
@@ -259,6 +482,7 @@ async function refresh(focus = false) {
         );
         if (seq !== prepareSeq) return;
         draft = next;
+        applyRendition(platform, draft);
 
         await loadConnections();
         if (seq !== prepareSeq) return;
@@ -289,8 +513,10 @@ function focusSocialEditor() {
 function syncTabs() {
     for (const button of tabs.querySelectorAll<HTMLButtonElement>("button[data-platform]")) {
         const active = button.dataset.platform === platform;
+        const locked = lockedPlatform !== null && button.dataset.platform !== lockedPlatform;
         button.classList.toggle("is-active", active);
         button.setAttribute("aria-selected", String(active));
+        button.disabled = locked;
     }
 }
 
@@ -348,6 +574,7 @@ function renderSocial() {
     openButton.hidden = false;
     saveDraftButton.hidden = true;
     submitButton.hidden = true;
+    syncSlotActions();
 
     textArea.disabled = false;
     const over = draft.overLimit && platform === "x";
@@ -486,6 +713,7 @@ async function copyText(value: string): Promise<boolean> {
 }
 
 async function runCopy() {
+    if (!(await ensureSlotSaved())) return;
     const value = primaryText();
     if (!value.trim()) return;
     if (!(await copyText(value))) return;
@@ -494,7 +722,8 @@ async function runCopy() {
     setTimeout(() => (copyButton.textContent = label), 1600);
 }
 
-function openComposer() {
+async function openComposer() {
+    if (!(await ensureSlotSaved())) return;
     const value = firstPart().trim();
     if (!value) return;
     const url =
@@ -541,6 +770,7 @@ function renderBlog() {
     copyButton.hidden = true;
     openButton.hidden = true;
     syncTabs();
+    syncSlotActions();
 
     const connection = connections[platform];
     const connected = !!connection?.connected;
@@ -658,6 +888,7 @@ async function submitBlog(asDraft: boolean) {
     if (!draft || !isBlogPlatform(platform) || busy) return;
     const form = currentBlogForm();
     if (!form) return;
+    if (!(await ensureSlotSaved())) return;
 
     const target = publishState?.targets?.[platform];
 
@@ -695,6 +926,7 @@ async function submitBlog(asDraft: boolean) {
         } else {
             showNotice(result.status === "published" ? "Published." : "Draft saved.");
         }
+        window.dispatchEvent(new CustomEvent("planner:refresh-statuses"));
     } catch (err) {
         showError(err);
     } finally {
@@ -765,6 +997,7 @@ async function unlink() {
     try {
         publishState = await PublishService.Unlink(platform, source.id);
         showNotice(`Unlinked ${platformName(platform)}. The remote post was not changed.`);
+        window.dispatchEvent(new CustomEvent("planner:refresh-statuses"));
     } catch (err) {
         showError(err);
     } finally {
@@ -786,6 +1019,7 @@ function openRemotePost() {
 tabs.addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-platform]");
     if (!button) return;
+    if (lockedPlatform !== null && button.dataset.platform !== lockedPlatform) return;
     platform = button.dataset.platform as Platform;
     syncTabs();
     void refresh();
@@ -852,9 +1086,11 @@ submitButton.addEventListener("click", () => void submitBlog(false));
 statusView.addEventListener("click", openRemotePost);
 statusUnlink.addEventListener("click", () => void unlink());
 
-cancelButton.addEventListener("click", closePublish);
+cancelButton.addEventListener("click", () => closePublish(true));
 copyButton.addEventListener("click", () => void runCopy());
-openButton.addEventListener("click", openComposer);
+openButton.addEventListener("click", () => void openComposer());
+saveSlotButton.addEventListener("click", () => void saveToSlot(true));
+regenerateButton.addEventListener("click", () => void regenerate());
 modal.addEventListener("click", (event) => {
     if (event.target === modal) closePublish();
 });

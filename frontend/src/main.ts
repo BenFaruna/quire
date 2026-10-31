@@ -1,8 +1,15 @@
 import "./style.css";
 import { Browser, Dialogs } from "@wailsio/runtime";
 import * as NotesService from "../bindings/post-planner/notesservice.js";
+import * as PlannerService from "../bindings/post-planner/plannerservice.js";
 import type { Note, NoteSummary } from "../bindings/post-planner/models.js";
 import { isPublishOpen, openPublishModal } from "./publish.js";
+import {
+    initPlanner,
+    openSchedulerForNote,
+    renderPlannerScreen,
+    type PlannerHost,
+} from "./planner.js";
 
 // ---------------------------------------------------------------------------
 // DOM
@@ -25,6 +32,9 @@ const saveStatus = document.getElementById("save-status") as HTMLSpanElement;
 const deleteButton = document.getElementById("delete-note") as HTMLButtonElement;
 const exportButton = document.getElementById("export-note") as HTMLButtonElement;
 const publishButton = document.getElementById("publish-note") as HTMLButtonElement;
+const scheduleButton = document.getElementById("schedule-note") as HTMLButtonElement;
+const screenToggle = document.getElementById("screen-toggle") as HTMLDivElement;
+const plannerView = document.getElementById("planner-view") as HTMLElement;
 const exportModal = document.getElementById("export-modal") as HTMLDivElement;
 const exportList = document.getElementById("export-list") as HTMLUListElement;
 const exportSelectAll = document.getElementById("export-select-all") as HTMLInputElement;
@@ -62,9 +72,27 @@ let confirmResolve: ((confirmed: boolean) => void) | null = null;
 let confirmReturnFocus: HTMLElement | null = null;
 
 type ViewMode = "edit" | "split" | "preview";
+type Screen = "notes" | "queue" | "calendar";
 
 const MODE_KEY = "notes.viewMode";
 const LAST_NOTE_KEY = "notes.lastId";
+const COLLAPSED_KEY = "notes.collapsedStatuses";
+
+const STATUS_ORDER = ["overdue", "scheduled", "ready", "drafting", "idea", "posted", "published"] as const;
+const STATUS_LABEL: Record<string, string> = {
+    overdue: "Overdue",
+    scheduled: "Scheduled",
+    ready: "Ready",
+    drafting: "Drafting",
+    idea: "Idea",
+    posted: "Posted",
+    published: "Published",
+    other: "Other",
+};
+
+let screen: Screen = "notes";
+let statuses: Record<string, string> | null = null;
+let collapsedStatuses = new Set<string>();
 
 // Webviews occasionally restrict localStorage; never let that break the app.
 const storage = {
@@ -83,6 +111,20 @@ const storage = {
         }
     },
 };
+
+function loadCollapsedStatuses(): string[] {
+    try {
+        const raw = storage.get(COLLAPSED_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed.filter((value) => typeof value === "string") : [];
+    } catch {
+        return [];
+    }
+}
+
+function saveCollapsedStatuses() {
+    storage.set(COLLAPSED_KEY, JSON.stringify([...collapsedStatuses]));
+}
 
 // ---------------------------------------------------------------------------
 // Small utilities
@@ -177,35 +219,90 @@ function filteredNotes(): NoteSummary[] {
     );
 }
 
+function createNoteItem(note: NoteSummary): HTMLLIElement {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "note-item";
+    button.dataset.id = note.id;
+    if (note.id === activeId) button.classList.add("is-active");
+
+    const title = document.createElement("span");
+    title.className = "note-item-title";
+    title.textContent = note.title || "Untitled note";
+
+    const meta = document.createElement("span");
+    meta.className = "note-item-meta";
+    const time = document.createElement("span");
+    time.textContent = relativeTime(note.modified);
+    const snippet = document.createElement("span");
+    snippet.className = "note-item-preview";
+    snippet.textContent = note.preview;
+    meta.append(time, snippet);
+
+    button.append(title, meta);
+    button.addEventListener("click", () => void selectNote(note.id));
+    item.append(button);
+    return item;
+}
+
 function renderList() {
     const visible = filteredNotes();
     noteList.replaceChildren();
 
-    for (const note of visible) {
-        const item = document.createElement("li");
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "note-item";
-        button.dataset.id = note.id;
-        if (note.id === activeId) button.classList.add("is-active");
+    if (statuses) {
+        const groups = new Map<string, NoteSummary[]>();
+        for (const note of visible) {
+            const raw = statuses[note.id] ?? "other";
+            const status = (STATUS_ORDER as readonly string[]).includes(raw) ? raw : "other";
+            const bucket = groups.get(status) ?? [];
+            bucket.push(note);
+            groups.set(status, bucket);
+        }
+        const order = [
+            ...STATUS_ORDER.filter((status) => groups.has(status)),
+            ...(groups.has("other") ? ["other"] : []),
+        ];
+        for (const status of order) {
+            const notesInGroup = groups.get(status) ?? [];
+            const group = document.createElement("li");
+            group.className = "note-group";
+            group.dataset.status = status;
 
-        const title = document.createElement("span");
-        title.className = "note-item-title";
-        title.textContent = note.title || "Untitled note";
+            const header = document.createElement("button");
+            header.type = "button";
+            header.className = "note-group-head";
+            const collapsed = collapsedStatuses.has(status);
+            header.setAttribute("aria-expanded", String(!collapsed));
+            const caret = document.createElement("span");
+            caret.className = "note-group-caret";
+            caret.textContent = "▾";
+            const label = document.createElement("span");
+            label.textContent = STATUS_LABEL[status] ?? status;
+            const count = document.createElement("span");
+            count.className = "note-group-count";
+            count.textContent = String(notesInGroup.length);
+            header.append(caret, label, count);
+            header.addEventListener("click", () => {
+                if (collapsedStatuses.has(status)) {
+                    collapsedStatuses.delete(status);
+                } else {
+                    collapsedStatuses.add(status);
+                }
+                saveCollapsedStatuses();
+                renderList();
+            });
 
-        const meta = document.createElement("span");
-        meta.className = "note-item-meta";
-        const time = document.createElement("span");
-        time.textContent = relativeTime(note.modified);
-        const snippet = document.createElement("span");
-        snippet.className = "note-item-preview";
-        snippet.textContent = note.preview;
-        meta.append(time, snippet);
+            const list = document.createElement("ul");
+            list.className = "note-group-list";
+            for (const note of notesInGroup) list.append(createNoteItem(note));
 
-        button.append(title, meta);
-        button.addEventListener("click", () => void selectNote(note.id));
-        item.append(button);
-        noteList.append(item);
+            if (collapsed) group.classList.add("is-collapsed");
+            group.append(header, list);
+            noteList.append(group);
+        }
+    } else {
+        for (const note of visible) noteList.append(createNoteItem(note));
     }
 
     listEmpty.hidden = visible.length !== 0 || notes.length === 0;
@@ -226,10 +323,30 @@ function updateActiveListItem() {
 async function loadNotes() {
     try {
         notes = (await NotesService.List()) ?? [];
+        await loadStatuses();
         renderList();
     } catch (err) {
         reportError("Could not load notes", err);
     }
+}
+
+async function loadStatuses() {
+    try {
+        const map = await PlannerService.Statuses();
+        statuses = map
+            ? (Object.fromEntries(
+                  Object.entries(map).filter(([, value]) => typeof value === "string"),
+              ) as Record<string, string>)
+            : null;
+    } catch {
+        statuses = null;
+        showToast("Could not load note statuses; showing an ungrouped list");
+    }
+}
+
+async function refreshStatuses() {
+    await loadStatuses();
+    renderList();
 }
 
 // ---------------------------------------------------------------------------
@@ -241,6 +358,7 @@ function setEditorEnabled(enabled: boolean) {
     editor.disabled = !enabled;
     deleteButton.disabled = !enabled;
     publishButton.disabled = !enabled;
+    scheduleButton.disabled = !enabled;
     emptyState.hidden = enabled;
     app.classList.toggle("has-note", enabled);
 }
@@ -305,7 +423,8 @@ async function saveNow(): Promise<void> {
             summary.title = saved.title;
             summary.modified = saved.modified;
             summary.preview = body.trim().slice(0, 120) || "No additional text";
-            renderList();
+            if (statuses) void refreshStatuses();
+            else renderList();
         }
     } catch (err) {
         if (seq === saveSeq) {
@@ -583,6 +702,45 @@ async function deleteNote() {
 }
 
 // ---------------------------------------------------------------------------
+// Screens
+// ---------------------------------------------------------------------------
+
+function setScreen(next: Screen) {
+    if (next !== "notes") void flushSave();
+    screen = next;
+    app.dataset.screen = next;
+    for (const button of screenToggle.querySelectorAll<HTMLButtonElement>("button")) {
+        button.classList.toggle("is-active", button.dataset.screen === next);
+    }
+    plannerView.hidden = next === "notes";
+    if (next !== "notes") void renderPlannerScreen(next);
+}
+
+const plannerHost: PlannerHost = {
+    showToast,
+    async openNote(id: string) {
+        await flushSave();
+        setScreen("notes");
+        await selectNote(id, { force: true });
+    },
+    async openPublishForSlot(noteID: string, slotID: string) {
+        await flushSave();
+        setScreen("notes");
+        await selectNote(noteID, { force: true });
+        openPublishModal({
+            id: noteID,
+            title: titleInput.value,
+            body: editor.value,
+            slotId: slotID,
+        });
+    },
+    flushSave,
+    confirm: confirmDestructive,
+    setScreen,
+    refreshStatuses,
+};
+
+// ---------------------------------------------------------------------------
 // Publish
 // ---------------------------------------------------------------------------
 
@@ -590,6 +748,11 @@ async function publishNote() {
     if (!activeId) return;
     await flushSave();
     openPublishModal({ id: activeId, title: titleInput.value, body: editor.value });
+}
+
+function scheduleNote() {
+    if (!activeId) return;
+    void flushSave().then(() => openSchedulerForNote(activeId!, scheduleButton));
 }
 
 // ---------------------------------------------------------------------------
@@ -815,6 +978,12 @@ importButton.addEventListener("click", () => void importNotes());
 emptyNewButton.addEventListener("click", () => void createNote());
 deleteButton.addEventListener("click", () => void deleteNote());
 publishButton.addEventListener("click", () => void publishNote());
+scheduleButton.addEventListener("click", scheduleNote);
+screenToggle.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-screen]");
+    if (button) setScreen(button.dataset.screen as Screen);
+});
+window.addEventListener("planner:refresh-statuses", () => void refreshStatuses());
 exportButton.addEventListener("click", openExport);
 exportCancel.addEventListener("click", closeExport);
 exportConfirm.addEventListener("click", () => void runExport());
@@ -878,6 +1047,9 @@ preview.addEventListener("change", (event) => {
 document.addEventListener("keydown", (event) => {
     // The publish dialog owns the keyboard while it is open.
     if (isPublishOpen()) return;
+
+    // Planner surfaces handle their own shortcuts and forms.
+    if (screen !== "notes") return;
 
     // The export modal owns Escape while it is open.
     if (!exportModal.hidden) {
@@ -963,6 +1135,9 @@ async function boot() {
     setMode((storage.get(MODE_KEY) as ViewMode) || "split");
     setEditorEnabled(false);
     updateStats();
+    collapsedStatuses = new Set(loadCollapsedStatuses());
+    initPlanner(plannerHost);
+    setScreen("notes");
 
     await loadNotes();
 
