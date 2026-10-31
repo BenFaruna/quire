@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
+	katex "github.com/FurqanSoftware/goldmark-katex"
 	"github.com/yuin/goldmark"
 	highlighting "github.com/yuin/goldmark-highlighting/v2"
 	"github.com/yuin/goldmark/extension"
@@ -23,6 +24,10 @@ var markdownRenderer = goldmark.New(
 		highlighting.NewHighlighting(
 			highlighting.WithStyle("github-dark"),
 		),
+		// Math is rendered to KaTeX HTML on the Go side, so the preview only
+		// needs the KaTeX stylesheet. Parsing happens before Markdown, which
+		// keeps underscores, asterisks and line breaks inside formulas intact.
+		&katex.Extender{},
 	),
 	goldmark.WithParserOptions(
 		parser.WithAutoHeadingID(),

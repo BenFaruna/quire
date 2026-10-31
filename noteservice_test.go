@@ -380,3 +380,27 @@ func TestAtomicWriteKeepsOriginalOnFailure(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderMathWithKaTeX(t *testing.T) {
+	html, err := renderMarkdown("Inline $E = mc^2$ works.\n\n$$\n\\frac{a}{b}\n$$\n")
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	for _, want := range []string{`class="katex"`, `class="katex-display"`, "<mfrac"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("rendered HTML missing %q:\n%s", want, html)
+		}
+	}
+}
+
+func TestRenderMermaidFenceStaysForClient(t *testing.T) {
+	html, err := renderMarkdown("```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n")
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	for _, want := range []string{`class="language-mermaid"`, "graph TD"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("rendered HTML missing %q:\n%s", want, html)
+		}
+	}
+}

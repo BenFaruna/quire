@@ -966,6 +966,45 @@ button {
     color: var(--text);
 }
 
+/* KaTeX ------------------------------------------------------------------- */
+
+.katex {
+    font-size: 1.03em;
+}
+
+.katex-display {
+    margin: 1em 0;
+    padding: 2px 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+/* Mermaid ----------------------------------------------------------------- */
+
+.mermaid-block {
+    margin: 1.2em 0;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+    overflow-x: auto;
+    text-align: center;
+}
+
+.mermaid-block svg {
+    max-width: 100%;
+    height: auto;
+}
+
+.mermaid-block.is-error {
+    color: var(--danger);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    text-align: left;
+    white-space: pre-wrap;
+}
+
 .markdown-body table {
     display: block;
     width: max-content;

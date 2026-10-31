@@ -1,3 +1,4 @@
+import "katex/dist/katex.min.css";
 import "./style.css";
 import { Browser, Dialogs } from "@wailsio/runtime";
 import * as NotesService from "../bindings/post-planner/notesservice.js";
@@ -757,6 +758,7 @@ async function printNotes(ids: string[]) {
             const article = document.createElement("article");
             article.className = "print-note markdown-body";
             article.innerHTML = html;
+            await renderMermaidBlocks(article);
             printRoot.append(article);
         }
 
@@ -872,7 +874,7 @@ async function renderPreview() {
         const html = await NotesService.Render(markdown);
         if (seq !== previewSeq) return;
         preview.innerHTML = html;
-        decoratePreview();
+        await decoratePreview(seq);
         if (app.dataset.mode === "split") {
             scrollSource = null;
             syncScroll(editor, previewPane);
@@ -882,7 +884,86 @@ async function renderPreview() {
     }
 }
 
-function decoratePreview() {
+type MermaidApi = typeof import("mermaid").default;
+
+let mermaidPromise: Promise<MermaidApi> | null = null;
+let mermaidSeq = 0;
+
+function loadMermaid(): Promise<MermaidApi> {
+    if (!mermaidPromise) {
+        mermaidPromise = import("mermaid").then(({ default: mermaid }) => {
+            mermaid.initialize({
+                startOnLoad: false,
+                securityLevel: "strict",
+                suppressErrorRendering: true,
+                theme: "dark",
+                darkMode: true,
+                fontFamily: "inherit",
+                themeVariables: {
+                    background: "transparent",
+                    primaryColor: "#1a222d",
+                    primaryTextColor: "#dbe3ee",
+                    primaryBorderColor: "#2c3642",
+                    lineColor: "#8b97a8",
+                    secondaryColor: "#202a36",
+                    tertiaryColor: "#141a22",
+                    fontSize: "14px",
+                },
+            });
+            return mermaid;
+        });
+    }
+    return mermaidPromise;
+}
+
+// Mermaid has to run in the webview. The Markdown renderer deliberately leaves
+// ```mermaid fences as plain code blocks so this can replace them with an SVG.
+async function renderMermaidBlocks(
+    container: HTMLElement,
+    isStale: () => boolean = () => false,
+): Promise<void> {
+    const codes = Array.from(
+        container.querySelectorAll<HTMLElement>("pre > code.language-mermaid"),
+    );
+    if (codes.length === 0) return;
+
+    let mermaid: MermaidApi;
+    try {
+        mermaid = await loadMermaid();
+    } catch (err) {
+        for (const code of codes) {
+            const pre = code.parentElement;
+            if (!pre) continue;
+            const wrapper = document.createElement("div");
+            wrapper.className = "mermaid-block is-error";
+            wrapper.textContent = `Diagram error: ${err instanceof Error ? err.message : String(err)}`;
+            pre.replaceWith(wrapper);
+        }
+        return;
+    }
+
+    for (const code of codes) {
+        if (isStale()) return;
+        const pre = code.parentElement;
+        if (!pre) continue;
+        const source = code.textContent ?? "";
+        const wrapper = document.createElement("div");
+        wrapper.className = "mermaid-block";
+        pre.replaceWith(wrapper);
+        try {
+            const { svg } = await mermaid.render(`mermaid-${++mermaidSeq}`, source);
+            if (isStale()) return;
+            wrapper.innerHTML = svg;
+        } catch (err) {
+            if (isStale()) return;
+            wrapper.classList.add("is-error");
+            const message = err instanceof Error ? err.message : String(err);
+            wrapper.textContent = `Diagram error: ${message}`;
+        }
+    }
+}
+
+async function decoratePreview(token = previewSeq) {
     // External links open in the user's browser instead of inside the webview.
     for (const anchor of preview.querySelectorAll<HTMLAnchorElement>('a[href^="http"]')) {
         anchor.target = "_blank";
@@ -894,6 +975,8 @@ function decoratePreview() {
     for (const box of preview.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')) {
         box.disabled = false;
     }
+
+    await renderMermaidBlocks(preview, () => token !== previewSeq);
 
     // Give every fenced code block a copy button.
     for (const pre of preview.querySelectorAll<HTMLPreElement>("pre")) {
@@ -1021,6 +1104,15 @@ function runToolbarAction(action: string) {
             break;
         case "table":
             insertBlock("| Column | Column |\n| --- | --- |\n| Cell | Cell |\n");
+            break;
+        case "math":
+            wrapSelection("$", "$", "E = mc^2");
+            break;
+        case "mathblock":
+            insertBlock("$$\n\\frac{a}{b}\n$$\n");
+            break;
+        case "mermaid":
+            insertBlock("```mermaid\nflowchart LR\n  A[Start] --> B[End]\n```\n");
             break;
     }
 }
