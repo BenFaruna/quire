@@ -140,6 +140,93 @@ either API — “Save draft” is hidden for them so the button never lies.
 cookie-authenticated internal one), so the app does not publish there. Use the
 X/LinkedIn-style **Copy** flow and paste into the Substack editor.
 
+## MCP server
+
+The same binary can run as a local [Model Context Protocol](https://modelcontextprotocol.io)
+server, so an agent can search and write notes, update the planner, and prepare
+or publish posts without copy/paste. It speaks stdio and works with any MCP
+client; the desktop app does not need to be running.
+
+```bash
+bin/post-planner mcp
+```
+
+The server reads and writes the same Markdown files and `.plan.json` /
+`.publish.json` sidecars as the app. It reuses the real services, so schedule
+dedupe, `posted` derivation, backlog exclusions, drafts and publish tracking
+behave exactly as they do in the UI.
+
+### Tools
+
+| Tool | Purpose |
+| --- | --- |
+| `search_notes` | Case-insensitive title/body search with derived status |
+| `get_note` | Note body plus planner and publish sidecars |
+| `create_note`, `append_note` | Capture new notes, or append reviews/summaries |
+| `replace_note` | Full rewrite guarded by `expected_modified` |
+| `get_plan`, `list_statuses` | Read stages, slots and derived status |
+| `list_backlog`, `list_queue`, `list_history` | Planner views |
+| `set_stage`, `schedule_note`, `reschedule_slot`, `unschedule_note`, `mark_slot` | Planner mutations |
+| `prepare_draft`, `save_rendition` | Platform drafts and edited rendition snapshots |
+| `get_publish_state`, `list_connections` | Publish tracking and connected accounts |
+| `publish_note`, `update_published` | Two-step publish: `confirm=false` returns the payload, `confirm=true` sends it |
+
+Notes are also exposed as `notes://{id}` resources, plans as `plan://{id}`, and
+there is a `notes://index` resource. Optional prompts (`review_note`,
+`draft_post`) are provided for clients that support prompts.
+
+### Safety
+
+- `publish_note` never sends anything unless `confirm=true`; new posts are
+  remote drafts unless `draft=false` is also passed. An existing remote post is
+  never re-created: use `update_published` instead.
+- X and LinkedIn have no publishing API integration. Those calls return the
+  copy-ready draft text instead of pretending to post.
+- Planner sidecar updates take a cross-process file lock (`.notes.lock`), so the
+  app and the MCP server cannot lose each other's schedule changes.
+- There is no delete tool. Deleting notes remains a UI action with a
+  confirmation dialog.
+
+### Client configuration
+
+Most clients use the `mcpServers` shape:
+
+```json
+{
+  "mcpServers": {
+    "notes": {
+      "command": "/absolute/path/to/bin/post-planner",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+opencode uses:
+
+```json
+{
+  "mcp": {
+    "notes": {
+      "type": "local",
+      "command": ["/absolute/path/to/bin/post-planner", "mcp"],
+      "enabled": true
+    }
+  }
+}
+```
+
+On macOS, point `command` at the binary inside the bundle, for example
+`/Applications/Notes.app/Contents/MacOS/post-planner`.
+
+### Watching for changes
+
+While the app is open, it watches the notes directory with `fsnotify` (kernel
+events, no polling). A note created or edited by the MCP server or an external
+editor appears in the sidebar immediately. If the open note changed, the app
+reloads it when the editor is clean; if there are unsaved edits it shows a
+**Reload / Keep mine** banner instead of overwriting your text.
+
 ## Development
 
 ```bash
@@ -169,6 +256,11 @@ publishprovider.go  # provider interface and request/response types
 publishstore.go     # <id>.publish.json sidecar
 credentials.go      # keychain-backed credentials (+ 0600 file fallback)
 markdown.go         # shared goldmark pipeline
+mcp.go              # stdio MCP server: tools, resources, prompts
+watcher.go          # fsnotify watcher + external-change event
+lock.go             # cross-process notes-directory lock
+mcp_test.go
+watcher_test.go
 noteservice_test.go
 publish_test.go
 publish_blog_test.go

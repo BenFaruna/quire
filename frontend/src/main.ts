@@ -1,6 +1,6 @@
 import "katex/dist/katex.min.css";
 import "./style.css";
-import { Browser, Dialogs } from "@wailsio/runtime";
+import { Browser, Dialogs, Events } from "@wailsio/runtime";
 import * as NotesService from "../bindings/post-planner/notesservice.js";
 import * as PlannerService from "../bindings/post-planner/plannerservice.js";
 import type { Note, NoteSummary } from "../bindings/post-planner/models.js";
@@ -63,6 +63,9 @@ const confirmTitle = document.getElementById("confirm-title") as HTMLHeadingElem
 const confirmMessage = document.getElementById("confirm-message") as HTMLParagraphElement;
 const confirmCancel = document.getElementById("confirm-cancel") as HTMLButtonElement;
 const confirmDelete = document.getElementById("confirm-delete") as HTMLButtonElement;
+const diskBanner = document.getElementById("disk-banner") as HTMLDivElement;
+const diskReload = document.getElementById("disk-reload") as HTMLButtonElement;
+const diskKeep = document.getElementById("disk-keep") as HTMLButtonElement;
 
 // ---------------------------------------------------------------------------
 // State
@@ -450,6 +453,88 @@ async function refreshStatuses() {
 }
 
 // ---------------------------------------------------------------------------
+// External changes
+// ---------------------------------------------------------------------------
+
+function hideDiskBanner() {
+    diskBanner.hidden = true;
+}
+
+// Reload the open note without going through selectNote: the sidebar is already
+// refreshed, and the editor should keep its scroll position.
+async function reloadActiveFromDisk() {
+    if (!activeId) return;
+    const id = activeId;
+    const token = ++selectSeq;
+    try {
+        const note: Note = await NotesService.Get(id);
+        if (token !== selectSeq || activeId !== id) return;
+        titleInput.value = note.title;
+        editor.value = note.body;
+        dirty = false;
+        hideDiskBanner();
+        setSaveStatus(note.modified ? `Saved ${relativeTime(note.modified)}` : "");
+        updateStats();
+        updateActiveListItem();
+        await renderPreview();
+        showToast("Reloaded changes from disk");
+    } catch (err) {
+        reportError("Could not reload note", err);
+    }
+}
+
+interface ExternalChange {
+    noteIds?: unknown;
+    kinds?: unknown;
+}
+
+async function handleExternalChange(raw: unknown) {
+    const change = (raw ?? {}) as ExternalChange;
+    const ids = Array.isArray(change.noteIds)
+        ? change.noteIds.filter((value): value is string => typeof value === "string")
+        : [];
+    const kinds = Array.isArray(change.kinds)
+        ? change.kinds.filter((value): value is string => typeof value === "string")
+        : [];
+    if (ids.length === 0) return;
+
+    await loadNotes();
+
+    const id = activeId;
+    if (!id) return;
+
+    const bodyChanged = kinds.includes("body");
+    if (!bodyChanged) {
+        // Plan and publish sidecars only affect grouping and queue data, which
+        // loadNotes just refreshed. Re-rendering the planner here would close
+        // an open schedule popover for the app's own writes.
+        return;
+    }
+
+    if (!notes.some((note) => note.id === id)) {
+        activeId = null;
+        dirty = false;
+        hideDiskBanner();
+        titleInput.value = "";
+        editor.value = "";
+        preview.replaceChildren();
+        setEditorEnabled(false);
+        updateStats();
+        storage.set(LAST_NOTE_KEY, "");
+        showToast("The open note was deleted on disk");
+        return;
+    }
+
+    if (!ids.includes(id)) return;
+
+    if (dirty) {
+        diskBanner.hidden = false;
+    } else {
+        await reloadActiveFromDisk();
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Selection / editing
 // ---------------------------------------------------------------------------
 
@@ -470,6 +555,7 @@ async function selectNote(id: string, options: { force?: boolean } = {}) {
         return;
     }
     await flushSave();
+    hideDiskBanner();
 
     const token = ++selectSeq;
     setBusy(true);
@@ -522,6 +608,9 @@ async function saveNow(): Promise<void> {
         if (activeId === id) {
             if (!title.trim()) titleInput.value = saved.title;
             setSaveStatus("Saved just now");
+            // Saving writes the editor's version, so a pending external change
+            // has now been consciously overwritten.
+            hideDiskBanner();
         }
         const summary = notes.find((note) => note.id === id);
         if (summary) {
@@ -1282,6 +1371,11 @@ screenToggle.addEventListener("click", (event) => {
     if (button) setScreen(button.dataset.screen as Screen);
 });
 window.addEventListener("planner:refresh-statuses", () => void refreshStatuses());
+Events.On("notes:external-change", (event) => {
+    void handleExternalChange(event.data);
+});
+diskReload.addEventListener("click", () => void reloadActiveFromDisk());
+diskKeep.addEventListener("click", () => hideDiskBanner());
 exportButton.addEventListener("click", openExport);
 exportCancel.addEventListener("click", closeExport);
 exportConfirm.addEventListener("click", () => void runExport());
@@ -1439,6 +1533,10 @@ document.addEventListener("keydown", (event) => {
 
 // Best-effort save when the window loses focus (e.g. app is closing).
 window.addEventListener("blur", () => void flushSave());
+
+// Fallback for filesystems where the watcher cannot start: refresh the list
+// when the user comes back to the app.
+window.addEventListener("focus", () => void loadNotes());
 
 // ---------------------------------------------------------------------------
 // Boot

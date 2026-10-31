@@ -401,6 +401,56 @@ button {
     position: relative;
 }
 
+/* Shown when another process (usually the MCP server) edits the open note
+   while it has unsaved changes. It must never steal focus from the editor. */
+.disk-banner {
+    position: absolute;
+    right: 18px;
+    bottom: 52px;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    max-width: min(520px, calc(100% - 36px));
+    padding: 10px 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+    font-size: 12.5px;
+}
+
+.disk-banner[hidden] {
+    display: none;
+}
+
+.disk-banner-text {
+    color: var(--text);
+}
+
+.disk-banner-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.disk-banner button {
+    padding: 5px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 12px;
+}
+
+.disk-banner button:hover {
+    border-color: var(--accent);
+}
+
+.disk-banner button.subtle {
+    color: var(--text-muted);
+}
+
 .topbar-menu {
     position: absolute;
     top: calc(100% + 8px);

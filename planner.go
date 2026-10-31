@@ -133,6 +133,11 @@ func (s *PlannerService) SetStage(noteID, stage string) (PlanState, error) {
 	if err != nil {
 		return PlanState{}, err
 	}
+	unlock, err := lockNotesDir(root)
+	if err != nil {
+		return PlanState{}, err
+	}
+	defer unlock()
 	if err := requireNote(root, noteID); err != nil {
 		return PlanState{}, err
 	}
@@ -165,6 +170,11 @@ func (s *PlannerService) Schedule(noteID, platform string, at int64) (PlanState,
 	if err != nil {
 		return PlanState{}, err
 	}
+	unlock, err := lockNotesDir(root)
+	if err != nil {
+		return PlanState{}, err
+	}
+	defer unlock()
 	if err := requireNote(root, noteID); err != nil {
 		return PlanState{}, err
 	}
@@ -226,6 +236,11 @@ func (s *PlannerService) Reschedule(noteID, slotID string, at int64) (PlanState,
 	if err != nil {
 		return PlanState{}, err
 	}
+	unlock, err := lockNotesDir(root)
+	if err != nil {
+		return PlanState{}, err
+	}
+	defer unlock()
 	if err := requireNote(root, noteID); err != nil {
 		return PlanState{}, err
 	}
@@ -267,6 +282,11 @@ func (s *PlannerService) Unschedule(noteID, slotID string) (PlanState, error) {
 	if err != nil {
 		return PlanState{}, err
 	}
+	unlock, err := lockNotesDir(root)
+	if err != nil {
+		return PlanState{}, err
+	}
+	defer unlock()
 	if err := requireNote(root, noteID); err != nil {
 		return PlanState{}, err
 	}
@@ -313,6 +333,11 @@ func (s *PlannerService) MarkSlot(noteID, slotID, status string) (PlanState, err
 	if err != nil {
 		return PlanState{}, err
 	}
+	unlock, err := lockNotesDir(root)
+	if err != nil {
+		return PlanState{}, err
+	}
+	defer unlock()
 	if err := requireNote(root, noteID); err != nil {
 		return PlanState{}, err
 	}
@@ -341,6 +366,11 @@ func (s *PlannerService) SaveRendition(noteID, slotID string, r Rendition) (Plan
 	if err != nil {
 		return PlanState{}, err
 	}
+	unlock, err := lockNotesDir(root)
+	if err != nil {
+		return PlanState{}, err
+	}
+	defer unlock()
 	state, _, err := readPlanState(root, noteID)
 	if err != nil {
 		return PlanState{}, err
@@ -593,6 +623,11 @@ func (s *PlannerService) markNotified(noteID, slotID string, scheduledAt, at int
 	if err != nil {
 		return err
 	}
+	unlock, err := lockNotesDir(root)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	state, _, err := readPlanState(root, noteID)
 	if err != nil {
 		return err

@@ -42,6 +42,9 @@ type Note struct {
 type NotesService struct {
 	mu   sync.Mutex
 	root string
+	// writes lets the GUI watcher tell its own saves apart from edits made by
+	// another process (the MCP server or an external editor).
+	writes *writeTracker
 }
 
 func NewNotesService() *NotesService {
@@ -151,6 +154,9 @@ func (s *NotesService) createWith(title, body string) (Note, error) {
 	}); err != nil {
 		return Note{}, fmt.Errorf("create note: %w", err)
 	}
+	if s.writes != nil {
+		s.writes.mark(path)
+	}
 	return Note{ID: id, Title: title, Body: body, Modified: now.UnixMilli()}, nil
 }
 
@@ -177,6 +183,9 @@ func (s *NotesService) Save(id, title, body string) (Note, error) {
 		return err
 	}); err != nil {
 		return Note{}, fmt.Errorf("save note: %w", err)
+	}
+	if s.writes != nil {
+		s.writes.mark(path)
 	}
 	return Note{ID: id, Title: title, Body: body, Modified: time.Now().UnixMilli()}, nil
 }
@@ -260,6 +269,152 @@ func (s *NotesService) Import(paths []string) ([]Note, error) {
 // Render converts Markdown to HTML using the shared goldmark pipeline.
 func (s *NotesService) Render(markdown string) (string, error) {
 	return renderMarkdown(markdown)
+}
+
+// search performs a case-insensitive substring search over note titles and
+// bodies, newest first. An empty query lists the most recent notes. It backs
+// the MCP search tool; the desktop UI still filters the list client-side.
+func (s *NotesService) search(query string, limit int) ([]NoteSummary, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.init(); err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	needle := strings.ToLower(strings.TrimSpace(query))
+
+	entries, err := os.ReadDir(s.root)
+	if err != nil {
+		return nil, fmt.Errorf("read notes: %w", err)
+	}
+	matches := make([]NoteSummary, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".md") {
+			continue
+		}
+		id := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+		path := filepath.Join(s.root, entry.Name())
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		title, body := splitDocument(string(raw))
+		if needle != "" &&
+			!strings.Contains(strings.ToLower(title), needle) &&
+			!strings.Contains(strings.ToLower(body), needle) {
+			continue
+		}
+		matches = append(matches, NoteSummary{
+			ID:       id,
+			Title:    title,
+			Preview:  previewText(body),
+			Modified: info.ModTime().UnixMilli(),
+		})
+	}
+	sort.Slice(matches, func(i, j int) bool {
+		return matches[i].Modified > matches[j].Modified
+	})
+	if len(matches) > limit {
+		matches = matches[:limit]
+	}
+	return matches, nil
+}
+
+// createTitled creates a note with content. The MCP server uses it so an agent
+// can save text without first creating an empty note and then saving it.
+func (s *NotesService) createTitled(title, body string) (Note, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.init(); err != nil {
+		return Note{}, err
+	}
+	title = strings.TrimSpace(title)
+	if title == "" {
+		title = "Untitled note"
+	}
+	body = strings.TrimRight(strings.ReplaceAll(body, "\r\n", "\n"), " \t\n")
+	return s.createWith(title, body)
+}
+
+// appendTo adds Markdown to the end of a note. Appending rather than replacing
+// keeps agent summaries from clobbering edits made in the app.
+func (s *NotesService) appendTo(id, markdown string) (Note, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.init(); err != nil {
+		return Note{}, err
+	}
+	note, err := s.readNoteLocked(id)
+	if err != nil {
+		return Note{}, err
+	}
+	markdown = strings.TrimRight(strings.ReplaceAll(markdown, "\r\n", "\n"), " \t\n")
+	if strings.TrimSpace(markdown) == "" {
+		return Note{}, errors.New("nothing to append")
+	}
+
+	body := note.Body
+	if strings.TrimSpace(body) != "" {
+		body = strings.TrimRight(body, " \t\n") + "\n\n"
+	}
+	body += markdown
+
+	path := filepath.Join(s.root, id+".md")
+	if err := writeFileAtomic(path, 0o644, func(w io.Writer) error {
+		_, err := io.WriteString(w, composeDocument(note.Title, body))
+		return err
+	}); err != nil {
+		return Note{}, fmt.Errorf("append to note: %w", err)
+	}
+	if s.writes != nil {
+		s.writes.mark(path)
+	}
+	return Note{ID: id, Title: note.Title, Body: body, Modified: time.Now().UnixMilli()}, nil
+}
+
+// replaceIfUnchanged replaces a note body only when it still has the mtime the
+// caller read. expectedModified <= 0 skips the check. This is the optimistic
+// concurrency guard for agents that rewrite whole documents.
+func (s *NotesService) replaceIfUnchanged(id, title, body string, expectedModified int64) (Note, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.init(); err != nil {
+		return Note{}, err
+	}
+	note, err := s.readNoteLocked(id)
+	if err != nil {
+		return Note{}, err
+	}
+	if expectedModified > 0 && note.Modified != expectedModified {
+		return Note{}, fmt.Errorf(
+			"note %q changed on disk (modified %d, expected %d); read it again and retry",
+			id, note.Modified, expectedModified,
+		)
+	}
+
+	title = strings.TrimSpace(title)
+	if title == "" {
+		title = note.Title
+	}
+	body = strings.ReplaceAll(body, "\r\n", "\n")
+
+	path := filepath.Join(s.root, id+".md")
+	if err := writeFileAtomic(path, 0o644, func(w io.Writer) error {
+		_, err := io.WriteString(w, composeDocument(title, body))
+		return err
+	}); err != nil {
+		return Note{}, fmt.Errorf("save note: %w", err)
+	}
+	if s.writes != nil {
+		s.writes.mark(path)
+	}
+	return Note{ID: id, Title: title, Body: body, Modified: time.Now().UnixMilli()}, nil
 }
 
 // NotesPath exposes the on-disk location for display in the UI.

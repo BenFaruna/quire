@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"log"
+	"os"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
@@ -14,9 +15,21 @@ import (
 var assets embed.FS
 
 func main() {
+	// `post-planner mcp` runs the agent-facing MCP server over stdin/stdout.
+	// It shares the storage and business rules with the GUI but never starts
+	// the webview, so it works while the app is closed.
+	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		if err := runMCP(); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
 	notes := NewNotesService()
 	publish := NewPublishService(notes)
 	planner := NewPlannerService(notes, publish)
+	tracker := newWriteTracker()
+	notes.writes = tracker
 	notifier := notifications.New()
 	app := application.New(application.Options{
 		Name:        "Notes",
@@ -39,6 +52,7 @@ func main() {
 	// registered after construction. Native notifications are best-effort.
 	reminders := NewReminderService(planner, eventAlert{}, nativeAlert{notifier: notifier})
 	app.RegisterService(application.NewService(reminders))
+	app.RegisterService(application.NewService(NewNotesWatcher(notes, tracker)))
 
 	go func() {
 		if _, err := notifier.RequestNotificationAuthorization(); err != nil {
