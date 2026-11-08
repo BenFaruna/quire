@@ -62,7 +62,9 @@ and delete categories from Home or from the `+` chip above the note list;
 deleting a category keeps its notes and moves them to **Inbox**.
 
 The chips above the note list filter by category, and the status bar under the
-editor sets the open note's category. Creating a note while a category is
+editor sets the open note's category. The list itself groups by planner status
+or by category through the **Group by** switch above it, and the app remembers
+which one you last used. Creating a note while a category is
 selected files it there, and importing Markdown from that state files the
 imported notes there too.
 

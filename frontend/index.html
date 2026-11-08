@@ -44,6 +44,14 @@
             <button class="search-clear" id="search-clear" aria-label="Clear search" hidden>&times;</button>
         </div>
 
+        <div class="list-grouping">
+            <span class="list-grouping-label">Group by</span>
+            <div class="segmented segmented-sm" id="group-toggle" role="group" aria-label="Group notes by">
+                <button type="button" data-group="status" class="is-active" aria-pressed="true">Status</button>
+                <button type="button" data-group="category" aria-pressed="false">Category</button>
+            </div>
+        </div>
+
         <nav class="note-list-wrap">
             <ul class="note-list" id="note-list"></ul>
             <p class="list-empty" id="list-empty" hidden>No notes match your search.</p>

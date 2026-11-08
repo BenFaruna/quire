@@ -47,6 +47,7 @@ const menuDelete = document.getElementById("menu-delete") as HTMLButtonElement;
 const plannerView = document.getElementById("planner-view") as HTMLElement;
 const homeView = document.getElementById("home-view") as HTMLElement;
 const categoryFilterBar = document.getElementById("category-filter") as HTMLDivElement;
+const groupToggle = document.getElementById("group-toggle") as HTMLDivElement;
 const noteCategory = document.getElementById("note-category") as HTMLSelectElement;
 const exportModal = document.getElementById("export-modal") as HTMLDivElement;
 const exportList = document.getElementById("export-list") as HTMLUListElement;
@@ -99,6 +100,7 @@ const SPLIT_QUERY = "(min-width: 761px)";
 const MODE_KEY = "notes.viewMode";
 const LAST_NOTE_KEY = "notes.lastId";
 const COLLAPSED_KEY = "notes.collapsedStatuses";
+const GROUP_KEY = "notes.groupBy";
 
 const STATUS_ORDER = ["overdue", "scheduled", "ready", "drafting", "idea", "posted", "published"] as const;
 const STATUS_LABEL: Record<string, string> = {
@@ -149,6 +151,26 @@ function loadCollapsedStatuses(): string[] {
 
 function saveCollapsedStatuses() {
     storage.set(COLLAPSED_KEY, JSON.stringify([...collapsedStatuses]));
+}
+
+type GroupBy = "status" | "category";
+
+// The list groups by planner status until the user asks for categories.
+let groupBy: GroupBy = storage.get(GROUP_KEY) === "category" ? "category" : "status";
+
+function syncGroupToggle() {
+    for (const button of groupToggle.querySelectorAll<HTMLButtonElement>("button")) {
+        const active = button.dataset.group === groupBy;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-pressed", String(active));
+    }
+}
+
+function setGroupBy(next: GroupBy) {
+    groupBy = next;
+    storage.set(GROUP_KEY, next);
+    syncGroupToggle();
+    renderList();
 }
 
 // ---------------------------------------------------------------------------
@@ -360,11 +382,80 @@ function createNoteItem(note: NoteSummary): HTMLLIElement {
     return item;
 }
 
+function appendNoteGroup(
+    key: string,
+    label: string,
+    groupNotes: NoteSummary[],
+    attribute: "status" | "category",
+) {
+    // Category keys are namespaced so collapsing "daily-log" cannot also
+    // collapse a status group that happens to share the name.
+    const collapseKey = attribute === "category" ? `category:${key}` : key;
+    const group = document.createElement("li");
+    group.className = "note-group";
+    group.dataset[attribute] = key;
+
+    const header = document.createElement("button");
+    header.type = "button";
+    header.className = "note-group-head";
+    const collapsed = collapsedStatuses.has(collapseKey);
+    header.setAttribute("aria-expanded", String(!collapsed));
+    const caret = document.createElement("span");
+    caret.className = "note-group-caret";
+    caret.textContent = "▾";
+    const name = document.createElement("span");
+    name.textContent = label;
+    const count = document.createElement("span");
+    count.className = "note-group-count";
+    count.textContent = String(groupNotes.length);
+    header.append(caret, name, count);
+    header.addEventListener("click", () => {
+        if (collapsedStatuses.has(collapseKey)) {
+            collapsedStatuses.delete(collapseKey);
+        } else {
+            collapsedStatuses.add(collapseKey);
+        }
+        saveCollapsedStatuses();
+        renderList();
+    });
+
+    const list = document.createElement("ul");
+    list.className = "note-group-list";
+    for (const note of groupNotes) list.append(createNoteItem(note));
+
+    if (collapsed) group.classList.add("is-collapsed");
+    group.append(header, list);
+    noteList.append(group);
+}
+
+function categoryGroups(visible: NoteSummary[]): Array<[string, string, NoteSummary[]]> {
+    const known = new Set(categories.map((category) => category.id));
+    const buckets = new Map<string, NoteSummary[]>();
+    for (const note of visible) {
+        // A note whose category was deleted falls back to the inbox.
+        const id = note.categoryId && known.has(note.categoryId) ? note.categoryId : "";
+        const bucket = buckets.get(id);
+        if (bucket) bucket.push(note);
+        else buckets.set(id, [note]);
+    }
+    const order: Array<[string, string]> = [
+        ["", "Inbox"],
+        ...categories.map((category): [string, string] => [category.id, category.name]),
+    ];
+    return order
+        .map(([id, name]): [string, string, NoteSummary[]] => [id, name, buckets.get(id) ?? []])
+        .filter(([, , notesInGroup]) => notesInGroup.length > 0);
+}
+
 function renderList() {
     const visible = filteredNotes();
     noteList.replaceChildren();
 
-    if (statuses) {
+    if (groupBy === "category") {
+        for (const [id, name, notesInGroup] of categoryGroups(visible)) {
+            appendNoteGroup(id, name, notesInGroup, "category");
+        }
+    } else if (statuses) {
         const groups = new Map<string, NoteSummary[]>();
         for (const note of visible) {
             const raw = statuses[note.id] ?? "other";
@@ -378,42 +469,7 @@ function renderList() {
             ...(groups.has("other") ? ["other"] : []),
         ];
         for (const status of order) {
-            const notesInGroup = groups.get(status) ?? [];
-            const group = document.createElement("li");
-            group.className = "note-group";
-            group.dataset.status = status;
-
-            const header = document.createElement("button");
-            header.type = "button";
-            header.className = "note-group-head";
-            const collapsed = collapsedStatuses.has(status);
-            header.setAttribute("aria-expanded", String(!collapsed));
-            const caret = document.createElement("span");
-            caret.className = "note-group-caret";
-            caret.textContent = "▾";
-            const label = document.createElement("span");
-            label.textContent = STATUS_LABEL[status] ?? status;
-            const count = document.createElement("span");
-            count.className = "note-group-count";
-            count.textContent = String(notesInGroup.length);
-            header.append(caret, label, count);
-            header.addEventListener("click", () => {
-                if (collapsedStatuses.has(status)) {
-                    collapsedStatuses.delete(status);
-                } else {
-                    collapsedStatuses.add(status);
-                }
-                saveCollapsedStatuses();
-                renderList();
-            });
-
-            const list = document.createElement("ul");
-            list.className = "note-group-list";
-            for (const note of notesInGroup) list.append(createNoteItem(note));
-
-            if (collapsed) group.classList.add("is-collapsed");
-            group.append(header, list);
-            noteList.append(group);
+            appendNoteGroup(status, STATUS_LABEL[status] ?? status, groups.get(status) ?? [], "status");
         }
     } else {
         for (const note of visible) noteList.append(createNoteItem(note));
@@ -1555,6 +1611,13 @@ screenToggle.addEventListener("click", (event) => {
     if (button) setScreen(button.dataset.screen as Screen);
 });
 
+groupToggle.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-group]");
+    if (!button) return;
+    const next = button.dataset.group === "category" ? "category" : "status";
+    if (next !== groupBy) setGroupBy(next);
+});
+
 noteCategory.addEventListener("change", async () => {
     if (!activeId) return;
     const id = activeId;
@@ -1757,6 +1820,7 @@ async function boot() {
     collapsedStatuses = new Set(loadCollapsedStatuses());
     initPlanner(plannerHost);
     initHome(homeHost);
+    syncGroupToggle();
 
     await loadCategories();
     await loadNotes();
