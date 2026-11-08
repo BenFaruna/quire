@@ -403,14 +403,30 @@
 
 .status-category select {
     max-width: 170px;
-    height: 22px;
-    padding: 0 6px;
+    min-height: 22px;
+    /* No fixed height: the native font's ascent varies by platform, and a
+       tight box clips the text against the rounded border. */
+    padding: 3px 22px;
     border: 1px solid var(--border);
     border-radius: 999px;
-    background: #0c1117;
+    background-color: #0c1117;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%238b95a1' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 7px center;
+    background-size: 9px 6px;
     color: var(--text-muted);
+    font: inherit;
     font-size: 11.5px;
+    line-height: 1.2;
+    text-align: center;
+    appearance: none;
+    -webkit-appearance: none;
     outline: none;
+}
+
+.status-category select option {
+    background: #0c1117;
+    color: var(--text);
 }
 
 .status-category select:focus {
