@@ -25,6 +25,8 @@ func main() {
 		return
 	}
 
+	releaseSIGUSR1()
+
 	notes := NewNotesService()
 	publish := NewPublishService(notes)
 	planner := NewPlannerService(notes, publish)
