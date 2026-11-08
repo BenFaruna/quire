@@ -16,6 +16,23 @@ export interface BacklogItem {
 }
 
 /**
+ * Category is a user-defined bucket. Description records what the user intends
+ * to do with the category, which is what makes it useful to a model: an agent
+ * can read the description before deciding what to write there.
+ */
+export interface Category {
+    "id": string;
+    "name": string;
+    "description"?: string;
+
+    /**
+     * notes | journal
+     */
+    "kind": string;
+    "created": number;
+}
+
+/**
  * Draft is a note rendered for one platform, ready to be copied or posted.
  */
 export interface Draft {
@@ -72,6 +89,7 @@ export interface Note {
      * Unix milliseconds
      */
     "modified": number;
+    "categoryId": string;
 }
 
 /**
@@ -86,6 +104,7 @@ export interface NoteSummary {
      * Unix milliseconds
      */
     "modified": number;
+    "categoryId": string;
 }
 
 /**

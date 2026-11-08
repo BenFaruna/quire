@@ -12,4 +12,7 @@ build/android/overlay.json
 build/android/gen/
 
 .freebuff
+# Local MCP registration (machine-specific absolute path to the binary)
+.agents/mcp.json
 docs/superpowers/plans
+.cloud-attachments

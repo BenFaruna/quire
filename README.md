@@ -27,6 +27,14 @@ document's leading `# Heading` — so they remain portable and readable outside 
   Per-note `<id>.publish.json` tracking lets you update or unlink a post later.
 - **Atomic saves** — notes are written to a temp file, fsynced, then renamed, so
   a crash mid-write cannot truncate a note.
+- **Home screen** — the app opens on a map of your categories, with quick
+  actions for a new note and today's log, plus shortcuts to the queue and
+  calendar.
+- **Categories** — create your own buckets, each with a purpose description,
+  filter the note list by them, and file the open note from the status bar.
+- **Daily log** — a dated entry (`YYYY-MM-DD`) in the seeded Daily log category,
+  created from a small template. An agent can read a run of entries over MCP
+  and write a track record back into the notes.
 - **Search**, relative timestamps, and a live note list.
 - **Interactive task lists** — tick a checkbox in the preview to update the source.
 - **Keyboard shortcuts**:
@@ -40,6 +48,37 @@ document's leading `# Heading` — so they remain portable and readable outside 
   | `Ctrl/Cmd + Shift + P` | Publish this note |
   | `Ctrl/Cmd + F` | Focus search |
   | `Ctrl/Cmd + B` / `I` / `K` | Bold / italic / link |
+
+## Home, categories and the daily log
+
+The app opens on the **Home** screen. It is the map of the app: New note and
+Today's log actions, a card for every category, shortcuts to the queue and
+calendar, and the most recent notes.
+
+**Categories** are your own buckets for notes. Each has a name and a purpose —
+a sentence saying what belongs there. That purpose is what an agent reads
+before deciding what to write, so it is worth being specific. Create, rename
+and delete categories from Home or from the `+` chip above the note list;
+deleting a category keeps its notes and moves them to **Inbox**.
+
+The chips above the note list filter by category, and the status bar under the
+editor sets the open note's category. Creating a note while a category is
+selected files it there, and importing Markdown from that state files the
+imported notes there too.
+
+**Daily log.** The seeded Daily log category makes "log my day" a single dated
+note: Home → Today's log opens the entry for today, or creates it titled
+`YYYY-MM-DD` with `Log`, `Learned` and `Tomorrow` sections. Entries are
+ordinary Markdown notes in a category, so the MCP server can read a week or a
+month and
+write a **track record** into the seeded Track record category. The app itself
+does not call a model.
+
+Categories and assignments live in `.categories.json` in the notes directory,
+next to the Markdown files. A corrupt file is moved to `.bak` and treated as
+empty, and hand-edited assignments that point at a missing category are
+dropped. The file is updated under the same cross-process lock as the planner
+sidecars, so the app and the MCP server cannot lose each other's changes.
 
 ## Publishing
 
@@ -162,8 +201,11 @@ behave exactly as they do in the UI.
 | --- | --- |
 | `search_notes` | Case-insensitive title/body search with derived status |
 | `get_note` | Note body plus planner and publish sidecars |
-| `create_note`, `append_note` | Capture new notes, or append reviews/summaries |
+| `create_note`, `append_note` | Capture new notes (optionally in a category), or append reviews/summaries |
 | `replace_note` | Full rewrite guarded by `expected_modified` |
+| `list_categories`, `create_category` | Read categories with their purpose and note count, or add one |
+| `list_category_notes`, `set_note_category` | Pull a category's notes with full bodies; file or unfil a note |
+| `get_journal_entry`, `append_journal`, `list_journal` | Read or extend a dated daily log entry; list entries over a range |
 | `get_plan`, `list_statuses` | Read stages, slots and derived status |
 | `list_backlog`, `list_queue`, `list_history` | Planner views |
 | `set_stage`, `schedule_note`, `reschedule_slot`, `unschedule_note`, `mark_slot` | Planner mutations |
@@ -172,8 +214,16 @@ behave exactly as they do in the UI.
 | `publish_note`, `update_published` | Two-step publish: `confirm=false` returns the payload, `confirm=true` sends it |
 
 Notes are also exposed as `notes://{id}` resources, plans as `plan://{id}`, and
-there is a `notes://index` resource. Optional prompts (`review_note`,
-`draft_post`) are provided for clients that support prompts.
+there are `notes://index` and `categories://index` resources. Optional prompts
+(`review_note`, `draft_post`, `summarize_category`, `track_record`) are
+provided for clients that support prompts.
+
+The category tools are how an agent can add to a specific category, pull from
+it and summarise it: `list_categories` shows the user's stated purpose for each
+bucket, `list_category_notes` returns the source notes with full bodies, and
+`create_note` with a `category` (or `set_note_category`) writes the result back
+into the right place. `track_record` reads daily logs over a date range and
+writes a summary into the Track record category.
 
 ### Safety
 
@@ -219,6 +269,29 @@ opencode uses:
 On macOS, point `command` at the binary inside the bundle, for example
 `/Applications/Notes.app/Contents/MacOS/post-planner`.
 
+### Logging
+
+Diagnostics go to stderr and are also appended to
+`<config dir>/post-planner/mcp.log` (`~/.config/post-planner/mcp.log` on Linux,
+`~/Library/Application Support/post-planner/mcp.log` on macOS). The file exists
+because many clients hide their child process's stderr. It rotates to
+`mcp.log.1` at 1 MiB.
+
+Each launch logs its version, PID, executable path, working directory and notes
+directory, then every protocol method it handles — the handshake (`initialize`,
+or `server/discover` for newer clients), `tools/list`, `tools/call` with the
+tool name, `resources/read`, and so on — each with a duration and its outcome.
+Tool arguments are not logged because they carry note bodies.
+
+If the client reports that it cannot connect and the log has no `server
+starting` line, the client never launched the binary: check that `command` is an
+absolute path to the executable itself. If the log shows `server starting` but
+no `initialize`, the process started and the failure is in the handshake; the
+logged error says why.
+
+Set `POST_PLANNER_MCP_LOG` to move the file, or to `off` to keep diagnostics on
+stderr only.
+
 ### Watching for changes
 
 While the app is open, it watches the notes directory with `fsnotify` (kernel
@@ -256,8 +329,9 @@ publishprovider.go  # provider interface and request/response types
 publishstore.go     # <id>.publish.json sidecar
 credentials.go      # keychain-backed credentials (+ 0600 file fallback)
 markdown.go         # shared goldmark pipeline
-mcp.go              # stdio MCP server: tools, resources, prompts
+mcp.go              # stdio MCP server: tools, resources, prompts, logging
 watcher.go          # fsnotify watcher + external-change event
+categories.go       # category store, assignments and daily log entries
 lock.go             # cross-process notes-directory lock
 mcp_test.go
 watcher_test.go
@@ -268,6 +342,7 @@ publish_remote_test.go
 frontend/
   index.html
   src/main.ts       # UI: list, editor, preview, shortcuts
+  src/home.ts       # home screen and category dialog
   src/publish.ts    # publish dialog: social drafts, blog targets, tracking
   src/style.css
   bindings/         # generated TypeScript bindings (do not edit)
@@ -276,4 +351,6 @@ frontend/
 ## Where notes live
 
 `os.UserConfigDir()/post-planner/notes` — on Linux that is `~/.config/post-planner/notes`.
-Click the folder icon in the sidebar to copy the path to the clipboard.
+Click the folder icon in the sidebar to copy the path to the clipboard. Category
+definitions and assignments are in `.categories.json` there; notes themselves
+stay ordinary `.md` files.

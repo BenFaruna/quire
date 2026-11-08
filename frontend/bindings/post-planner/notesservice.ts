@@ -16,6 +16,21 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as $models from "./models.js";
 
 /**
+ * AssignCategory moves a note into a category. An empty category id clears the
+ * assignment.
+ */
+export function AssignCategory(noteID: string, categoryID: string): $CancellablePromise<$models.Note> {
+    return $Call.ByID(1564761961, noteID, categoryID);
+}
+
+/**
+ * Categories returns every category in creation order.
+ */
+export function Categories(): $CancellablePromise<$models.Category[] | null> {
+    return $Call.ByID(3761817440);
+}
+
+/**
  * Create adds a new note and returns it.
  */
 export function Create(): $CancellablePromise<$models.Note> {
@@ -23,10 +38,34 @@ export function Create(): $CancellablePromise<$models.Note> {
 }
 
 /**
+ * CreateCategory adds a category. Its description is the user's statement of
+ * intent for the category and is shown to agents by the MCP server.
+ */
+export function CreateCategory(name: string, description: string): $CancellablePromise<$models.Category> {
+    return $Call.ByID(3454872704, name, description);
+}
+
+/**
+ * CreateIn adds a note straight into a category. An empty category id creates
+ * an uncategorised note, which the UI shows under Inbox.
+ */
+export function CreateIn(categoryID: string): $CancellablePromise<$models.Note> {
+    return $Call.ByID(3978362855, categoryID);
+}
+
+/**
  * Delete removes a note from disk.
  */
 export function Delete(id: string): $CancellablePromise<void> {
     return $Call.ByID(1433266871, id);
+}
+
+/**
+ * DeleteCategory removes a category and clears its assignments. The notes
+ * themselves are kept; they become uncategorised.
+ */
+export function DeleteCategory(id: string): $CancellablePromise<void> {
+    return $Call.ByID(3312222667, id);
 }
 
 /**
@@ -59,6 +98,24 @@ export function Import(paths: string[] | null): $CancellablePromise<$models.Note
 }
 
 /**
+ * ImportInto imports Markdown files into a category. An empty category id
+ * leaves the imported notes uncategorised.
+ */
+export function ImportInto(paths: string[] | null, categoryID: string): $CancellablePromise<$models.Note[] | null> {
+    return $Call.ByID(1416915335, paths, categoryID);
+}
+
+/**
+ * JournalEntry returns the daily log entry for a date, creating it from a
+ * template when it does not exist yet. An empty date means today. Dates are
+ * local calendar days in the form YYYY-MM-DD, which is also the note title, so
+ * entries sort naturally and an agent can find a period by title.
+ */
+export function JournalEntry(date: string): $CancellablePromise<$models.Note> {
+    return $Call.ByID(398968069, date);
+}
+
+/**
  * List returns every note, newest first.
  */
 export function List(): $CancellablePromise<$models.NoteSummary[] | null> {
@@ -84,4 +141,12 @@ export function Render(markdown: string): $CancellablePromise<string> {
  */
 export function Save(id: string, title: string, body: string): $CancellablePromise<$models.Note> {
     return $Call.ByID(2486875065, id, title, body);
+}
+
+/**
+ * UpdateCategory renames a category or changes its purpose description. The
+ * journal kind is preserved.
+ */
+export function UpdateCategory(id: string, name: string, description: string): $CancellablePromise<$models.Category> {
+    return $Call.ByID(63054409, id, name, description);
 }

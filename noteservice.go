@@ -23,18 +23,20 @@ const maxImportSize = 5 << 20 // 5 MB
 
 // NoteSummary is the lightweight representation used to populate the note list.
 type NoteSummary struct {
-	ID       string `json:"id"`
-	Title    string `json:"title"`
-	Preview  string `json:"preview"`
-	Modified int64  `json:"modified"` // Unix milliseconds
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	Preview    string `json:"preview"`
+	Modified   int64  `json:"modified"` // Unix milliseconds
+	CategoryID string `json:"categoryId"`
 }
 
 // Note is a full note document.
 type Note struct {
-	ID       string `json:"id"`
-	Title    string `json:"title"`
-	Body     string `json:"body"`
-	Modified int64  `json:"modified"` // Unix milliseconds
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	Body       string `json:"body"`
+	Modified   int64  `json:"modified"` // Unix milliseconds
+	CategoryID string `json:"categoryId"`
 }
 
 // NotesService stores notes as plain Markdown files on disk, one file per note,
@@ -66,6 +68,10 @@ func (s *NotesService) init() error {
 	}
 	s.root = root
 
+	if err := ensureCategoryDefaults(root); err != nil {
+		return err
+	}
+
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return fmt.Errorf("read notes directory: %w", err)
@@ -92,6 +98,10 @@ func (s *NotesService) List() ([]NoteSummary, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read notes: %w", err)
 	}
+	state, err := readCategoryState(s.root)
+	if err != nil {
+		return nil, err
+	}
 
 	notes := make([]NoteSummary, 0, len(entries))
 	for _, entry := range entries {
@@ -110,10 +120,11 @@ func (s *NotesService) List() ([]NoteSummary, error) {
 		}
 		title, body := splitDocument(string(raw))
 		notes = append(notes, NoteSummary{
-			ID:       id,
-			Title:    title,
-			Preview:  previewText(body),
-			Modified: info.ModTime().UnixMilli(),
+			ID:         id,
+			Title:      title,
+			Preview:    previewText(body),
+			Modified:   info.ModTime().UnixMilli(),
+			CategoryID: assignCategoryForNote(&state, id),
 		})
 	}
 
@@ -135,15 +146,39 @@ func (s *NotesService) Get(id string) (Note, error) {
 
 // Create adds a new note and returns it.
 func (s *NotesService) Create() (Note, error) {
+	return s.CreateIn("")
+}
+
+// CreateIn adds a note straight into a category. An empty category id creates
+// an uncategorised note, which the UI shows under Inbox.
+func (s *NotesService) CreateIn(categoryID string) (Note, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.init(); err != nil {
 		return Note{}, err
 	}
-	return s.createWith("Untitled note", "")
+	categoryID = strings.TrimSpace(categoryID)
+	if categoryID != "" {
+		state, err := readCategoryState(s.root)
+		if err != nil {
+			return Note{}, err
+		}
+		category, ok := findCategory(&state, categoryID)
+		if !ok {
+			return Note{}, fmt.Errorf("category %q not found", categoryID)
+		}
+		categoryID = category.ID
+	}
+	return s.createWithCategory("Untitled note", "", categoryID)
 }
 
 func (s *NotesService) createWith(title, body string) (Note, error) {
+	return s.createWithCategory(title, body, "")
+}
+
+// createWithCategory creates a note and files it in a category. The caller must
+// hold s.mu, or be inside init, which already runs under it.
+func (s *NotesService) createWithCategory(title, body, categoryID string) (Note, error) {
 	id := newNoteID(s.root)
 	now := time.Now()
 	doc := composeDocument(title, body)
@@ -157,7 +192,14 @@ func (s *NotesService) createWith(title, body string) (Note, error) {
 	if s.writes != nil {
 		s.writes.mark(path)
 	}
-	return Note{ID: id, Title: title, Body: body, Modified: now.UnixMilli()}, nil
+	if categoryID != "" {
+		if err := s.setCategoryAssignmentLocked(id, categoryID); err != nil {
+			// Do not leave a note behind that claims a category it never got.
+			_ = os.Remove(path)
+			return Note{}, err
+		}
+	}
+	return Note{ID: id, Title: title, Body: body, Modified: now.UnixMilli(), CategoryID: categoryID}, nil
 }
 
 // Save writes a note to disk. An empty title falls back to "Untitled note".
@@ -187,7 +229,11 @@ func (s *NotesService) Save(id, title, body string) (Note, error) {
 	if s.writes != nil {
 		s.writes.mark(path)
 	}
-	return Note{ID: id, Title: title, Body: body, Modified: time.Now().UnixMilli()}, nil
+	state, err := readCategoryState(s.root)
+	if err != nil {
+		return Note{}, err
+	}
+	return Note{ID: id, Title: title, Body: body, Modified: time.Now().UnixMilli(), CategoryID: assignCategoryForNote(&state, id)}, nil
 }
 
 // Delete removes a note from disk.
@@ -207,6 +253,7 @@ func (s *NotesService) Delete(id string) error {
 	// Best-effort: a failure here must not block deleting the note itself.
 	_ = deletePublishState(s.root, id)
 	_ = deletePlanState(s.root, id)
+	_ = s.clearCategoryAssignment(id)
 	return nil
 }
 
@@ -216,6 +263,12 @@ func (s *NotesService) Delete(id string) error {
 // starts with an H1 that becomes the title, otherwise the file name is used and
 // the whole file becomes the body.
 func (s *NotesService) Import(paths []string) ([]Note, error) {
+	return s.ImportInto(paths, "")
+}
+
+// ImportInto imports Markdown files into a category. An empty category id
+// leaves the imported notes uncategorised.
+func (s *NotesService) ImportInto(paths []string, categoryID string) ([]Note, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.init(); err != nil {
@@ -223,6 +276,18 @@ func (s *NotesService) Import(paths []string) ([]Note, error) {
 	}
 	if len(paths) == 0 {
 		return nil, errors.New("no files selected")
+	}
+	categoryID = strings.TrimSpace(categoryID)
+	if categoryID != "" {
+		state, err := readCategoryState(s.root)
+		if err != nil {
+			return nil, err
+		}
+		category, ok := findCategory(&state, categoryID)
+		if !ok {
+			return nil, fmt.Errorf("category %q not found", categoryID)
+		}
+		categoryID = category.ID
 	}
 
 	imported := make([]Note, 0, len(paths))
@@ -257,7 +322,7 @@ func (s *NotesService) Import(paths []string) ([]Note, error) {
 			title = "Untitled note"
 		}
 
-		note, err := s.createWith(title, body)
+		note, err := s.createWithCategory(title, body, categoryID)
 		if err != nil {
 			return imported, err
 		}
@@ -289,6 +354,10 @@ func (s *NotesService) search(query string, limit int) ([]NoteSummary, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read notes: %w", err)
 	}
+	state, err := readCategoryState(s.root)
+	if err != nil {
+		return nil, err
+	}
 	matches := make([]NoteSummary, 0, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".md") {
@@ -311,10 +380,11 @@ func (s *NotesService) search(query string, limit int) ([]NoteSummary, error) {
 			continue
 		}
 		matches = append(matches, NoteSummary{
-			ID:       id,
-			Title:    title,
-			Preview:  previewText(body),
-			Modified: info.ModTime().UnixMilli(),
+			ID:         id,
+			Title:      title,
+			Preview:    previewText(body),
+			Modified:   info.ModTime().UnixMilli(),
+			CategoryID: assignCategoryForNote(&state, id),
 		})
 	}
 	sort.Slice(matches, func(i, j int) bool {
@@ -329,6 +399,12 @@ func (s *NotesService) search(query string, limit int) ([]NoteSummary, error) {
 // createTitled creates a note with content. The MCP server uses it so an agent
 // can save text without first creating an empty note and then saving it.
 func (s *NotesService) createTitled(title, body string) (Note, error) {
+	return s.createTitledIn(title, body, "")
+}
+
+// createTitledIn creates a note in a category given by id or name. An empty
+// category leaves the note uncategorised.
+func (s *NotesService) createTitledIn(title, body, categoryID string) (Note, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.init(); err != nil {
@@ -339,7 +415,20 @@ func (s *NotesService) createTitled(title, body string) (Note, error) {
 		title = "Untitled note"
 	}
 	body = strings.TrimRight(strings.ReplaceAll(body, "\r\n", "\n"), " \t\n")
-	return s.createWith(title, body)
+
+	categoryID = strings.TrimSpace(categoryID)
+	if categoryID != "" {
+		state, err := readCategoryState(s.root)
+		if err != nil {
+			return Note{}, err
+		}
+		category, ok := findCategory(&state, categoryID)
+		if !ok {
+			return Note{}, fmt.Errorf("category %q not found", categoryID)
+		}
+		categoryID = category.ID
+	}
+	return s.createWithCategory(title, body, categoryID)
 }
 
 // appendTo adds Markdown to the end of a note. Appending rather than replacing
@@ -375,7 +464,11 @@ func (s *NotesService) appendTo(id, markdown string) (Note, error) {
 	if s.writes != nil {
 		s.writes.mark(path)
 	}
-	return Note{ID: id, Title: note.Title, Body: body, Modified: time.Now().UnixMilli()}, nil
+	state, err := readCategoryState(s.root)
+	if err != nil {
+		return Note{}, err
+	}
+	return Note{ID: id, Title: note.Title, Body: body, Modified: time.Now().UnixMilli(), CategoryID: assignCategoryForNote(&state, id)}, nil
 }
 
 // replaceIfUnchanged replaces a note body only when it still has the mtime the
@@ -414,7 +507,11 @@ func (s *NotesService) replaceIfUnchanged(id, title, body string, expectedModifi
 	if s.writes != nil {
 		s.writes.mark(path)
 	}
-	return Note{ID: id, Title: title, Body: body, Modified: time.Now().UnixMilli()}, nil
+	state, err := readCategoryState(s.root)
+	if err != nil {
+		return Note{}, err
+	}
+	return Note{ID: id, Title: title, Body: body, Modified: time.Now().UnixMilli(), CategoryID: assignCategoryForNote(&state, id)}, nil
 }
 
 // NotesPath exposes the on-disk location for display in the UI.
@@ -495,7 +592,11 @@ func (s *NotesService) readNoteLocked(id string) (Note, error) {
 		return Note{}, fmt.Errorf("stat note: %w", err)
 	}
 	title, body := splitDocument(string(raw))
-	return Note{ID: id, Title: title, Body: body, Modified: info.ModTime().UnixMilli()}, nil
+	state, err := readCategoryState(s.root)
+	if err != nil {
+		return Note{}, err
+	}
+	return Note{ID: id, Title: title, Body: body, Modified: info.ModTime().UnixMilli(), CategoryID: assignCategoryForNote(&state, id)}, nil
 }
 
 func validateID(id string) error {

@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -32,23 +35,166 @@ Guidelines:
 - When using replace_note, pass the modified timestamp from get_note so a stale write is rejected.
 - Publishing is two-step: call publish_note with confirm=false to inspect the payload, then call it again with confirm=true to send it. Direct publishing currently exists only for dev.to and Hashnode; X and LinkedIn return copy-ready text.
 - Scheduling uses RFC3339 timestamps (or Unix milliseconds). The planner stores UTC milliseconds.
-- Never invent a note id: use the ids returned by search_notes or create_note.`
+- Never invent a note id: use the ids returned by search_notes or create_note.
+- Notes can be filed in user categories. Call list_categories first: each description states what the user wants in that category, so follow it. list_category_notes returns a category's notes with full bodies and is the source material for a summary. create_note and set_note_category file a note.
+- Daily logs are notes titled YYYY-MM-DD in the Daily log category. Use get_journal_entry and append_journal to log a day, and list_journal plus create_note to write a track record.`
+
+const mcpVersion = "1.0.0"
 
 func runMCP() error {
+	logger, logPath, logFile := newMCPLogger()
+	if logFile != nil {
+		defer logFile.Close()
+	}
+
 	notes := NewNotesService()
 	publish := NewPublishService(notes)
 	planner := NewPlannerService(notes, publish)
-	server := newMCPServer(notes, planner, publish)
+
+	// Resolve the notes directory before the handshake. Clients report a
+	// failed connection as a generic error, so an unusable storage directory
+	// must be logged here rather than surface later as an empty tool list.
+	if err := notes.init(); err != nil {
+		logger.Error("mcp: notes directory unavailable", "error", err)
+		return err
+	}
+
+	executable, _ := os.Executable()
+	cwd, _ := os.Getwd()
+	logger.Info("mcp: server starting",
+		"version", mcpVersion,
+		"pid", os.Getpid(),
+		"executable", executable,
+		"args", strings.Join(os.Args, " "),
+		"cwd", cwd,
+		"notes", notes.root,
+		"log_file", logPath,
+	)
+
+	server := newMCPServer(notes, planner, publish, logger)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// stdout belongs to the protocol; anything diagnostic must go to stderr.
-	log.SetOutput(os.Stderr)
 	if err := server.Run(ctx, &mcp.StdioTransport{}); err != nil && !errors.Is(err, context.Canceled) {
+		logger.Error("mcp: server exited with error", "error", err)
 		return err
 	}
+	logger.Info("mcp: server stopped")
 	return nil
+}
+
+// --- logging ----------------------------------------------------------------
+
+// stdout carries protocol frames, so diagnostics go to stderr. Many GUI MCP
+// clients hide or discard their child's stderr, which is why the same lines are
+// also appended to a log file: a connection that fails still leaves a trace.
+const (
+	// mcpLogEnv moves the log file (or disables it with "off").
+	mcpLogEnv = "POST_PLANNER_MCP_LOG"
+	// mcpLogMaxBytes caps the file; it is rotated to a single .1 backup.
+	mcpLogMaxBytes = 1 << 20
+)
+
+// newMCPLogger returns a logger writing to stderr and, when possible, to the
+// log file. The file is best-effort: losing it must not stop the server.
+func newMCPLogger() (*slog.Logger, string, io.Closer) {
+	writers := []io.Writer{os.Stderr}
+	logPath := mcpLogPath()
+	var logFile *os.File
+	if logPath != "" {
+		file, err := openMCPLogFile(logPath)
+		if err != nil {
+			log.Printf("mcp: log file %s unavailable, using stderr only: %v", logPath, err)
+			logPath = ""
+		} else {
+			writers = append(writers, file)
+			logFile = file
+		}
+	}
+
+	out := io.MultiWriter(writers...)
+	// Planner, watcher and reminder code log through the stdlib logger.
+	log.SetOutput(out)
+	logger := slog.New(slog.NewTextHandler(out, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	if logFile == nil {
+		return logger, logPath, nil
+	}
+	return logger, logPath, logFile
+}
+
+// mcpLogPath honours POST_PLANNER_MCP_LOG, then falls back to the app config
+// directory next to the notes.
+func mcpLogPath() string {
+	if value, ok := os.LookupEnv(mcpLogEnv); ok {
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case "", "off", "none", "stderr":
+			return ""
+		default:
+			return value
+		}
+	}
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(configDir, "post-planner", "mcp.log")
+}
+
+func openMCPLogFile(path string) (*os.File, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+	if info, err := os.Stat(path); err == nil && info.Size() > mcpLogMaxBytes {
+		_ = os.Rename(path, path+".1")
+	}
+	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+}
+
+// mcpRequestLogger records every protocol method the server handles, with its
+// duration and outcome. Arguments and results are deliberately not logged: they
+// carry note bodies and draft content.
+func mcpRequestLogger(logger *slog.Logger) mcp.Middleware {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			start := time.Now()
+			result, err := next(ctx, method, req)
+
+			attrs := []any{
+				"method", method,
+				"duration", time.Since(start).Round(time.Microsecond).String(),
+			}
+			if req != nil {
+				// The server sees raw params for tools/call; clients see typed ones.
+				switch params := req.GetParams().(type) {
+				case *mcp.CallToolParamsRaw:
+					if params.Name != "" {
+						attrs = append(attrs, "tool", params.Name)
+					}
+				case *mcp.CallToolParams:
+					if params.Name != "" {
+						attrs = append(attrs, "tool", params.Name)
+					}
+				}
+			}
+
+			switch {
+			case err != nil:
+				logger.Warn("mcp: request failed", append(attrs, "error", err)...)
+			case isToolError(result):
+				// Tool errors come back as a result, not as a returned error.
+				logger.Warn("mcp: tool returned an error", attrs...)
+			default:
+				logger.Info("mcp: request", attrs...)
+			}
+			return result, err
+		}
+	}
+}
+
+func isToolError(result mcp.Result) bool {
+	res, ok := result.(*mcp.CallToolResult)
+	return ok && res.IsError
 }
 
 type mcpTools struct {
@@ -57,11 +203,17 @@ type mcpTools struct {
 	publish *PublishService
 }
 
-func newMCPServer(notes *NotesService, planner *PlannerService, publish *PublishService) *mcp.Server {
+func newMCPServer(notes *NotesService, planner *PlannerService, publish *PublishService, logger *slog.Logger) *mcp.Server {
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
 	server := mcp.NewServer(
-		&mcp.Implementation{Name: "post-planner", Version: "1.0.0"},
-		&mcp.ServerOptions{Instructions: mcpServerInstructions},
+		&mcp.Implementation{Name: "post-planner", Version: mcpVersion},
+		&mcp.ServerOptions{Instructions: mcpServerInstructions, Logger: logger},
 	)
+	// The SDK logs session connect/end events through this logger, so a client
+	// that fails during the handshake is visible in the same file.
+	server.AddReceivingMiddleware(mcpRequestLogger(logger))
 	tools := &mcpTools{notes: notes, planner: planner, publish: publish}
 	tools.register(server)
 	registerMCPResources(server, tools)
@@ -79,11 +231,12 @@ type searchNotesInput struct {
 }
 
 type noteListItem struct {
-	ID       string `json:"id"`
-	Title    string `json:"title"`
-	Preview  string `json:"preview"`
-	Modified int64  `json:"modified" jsonschema:"Unix milliseconds"`
-	Status   string `json:"status,omitempty" jsonschema:"derived planner status"`
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	Preview    string `json:"preview"`
+	Modified   int64  `json:"modified" jsonschema:"Unix milliseconds"`
+	Status     string `json:"status,omitempty" jsonschema:"derived planner status"`
+	CategoryID string `json:"category_id,omitempty" jsonschema:"category the note is filed in, if any"`
 }
 
 type searchNotesOutput struct {
@@ -102,8 +255,57 @@ type getNoteOutput struct {
 }
 
 type createNoteInput struct {
-	Title string `json:"title" jsonschema:"note title"`
-	Body  string `json:"body" jsonschema:"Markdown body; Mermaid and LaTeX are supported"`
+	Title    string `json:"title" jsonschema:"note title"`
+	Body     string `json:"body" jsonschema:"Markdown body; Mermaid and LaTeX are supported"`
+	Category string `json:"category,omitempty" jsonschema:"category id or name from list_categories; empty leaves the note uncategorised"`
+}
+
+type categoryListItem struct {
+	Category
+	Count int `json:"count" jsonschema:"notes filed in this category"`
+}
+
+type listCategoriesOutput struct {
+	Categories []categoryListItem `json:"categories"`
+}
+
+type createCategoryInput struct {
+	Name        string `json:"name" jsonschema:"short category name; must be unique"`
+	Description string `json:"description,omitempty" jsonschema:"what the category is for; a model reads this before writing notes into it"`
+}
+
+type categoryNotesInput struct {
+	Category string `json:"category" jsonschema:"category id or name from list_categories; empty lists uncategorised notes"`
+	Limit    int    `json:"limit,omitempty" jsonschema:"maximum notes to return with full bodies (default 50, max 200)"`
+}
+
+type categoryNotesOutput struct {
+	Category Category `json:"category"`
+	Notes    []Note   `json:"notes"`
+}
+
+type setNoteCategoryInput struct {
+	NoteID   string `json:"note_id" jsonschema:"note id"`
+	Category string `json:"category" jsonschema:"category id or name; empty removes the note from its category"`
+}
+
+type journalInput struct {
+	Date string `json:"date,omitempty" jsonschema:"calendar day in YYYY-MM-DD; empty means today"`
+}
+
+type appendJournalInput struct {
+	Date     string `json:"date,omitempty" jsonschema:"calendar day in YYYY-MM-DD; empty means today"`
+	Markdown string `json:"markdown" jsonschema:"Markdown to append to the day's entry"`
+}
+
+type journalRangeInput struct {
+	From string `json:"from,omitempty" jsonschema:"first day, YYYY-MM-DD (inclusive); empty means no lower bound"`
+	To   string `json:"to,omitempty" jsonschema:"last day, YYYY-MM-DD (inclusive); empty means no upper bound"`
+}
+
+type journalListOutput struct {
+	Category Category `json:"category"`
+	Entries  []Note   `json:"entries"`
 }
 
 type appendNoteInput struct {
@@ -226,11 +428,12 @@ func (t *mcpTools) register(server *mcp.Server) {
 		items := make([]noteListItem, 0, len(matches))
 		for _, note := range matches {
 			items = append(items, noteListItem{
-				ID:       note.ID,
-				Title:    note.Title,
-				Preview:  note.Preview,
-				Modified: note.Modified,
-				Status:   statuses[note.ID],
+				ID:         note.ID,
+				Title:      note.Title,
+				Preview:    note.Preview,
+				Modified:   note.Modified,
+				Status:     statuses[note.ID],
+				CategoryID: note.CategoryID,
 			})
 		}
 		return nil, searchNotesOutput{Notes: items}, nil
@@ -258,10 +461,74 @@ func (t *mcpTools) register(server *mcp.Server) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "create_note",
-		Description: "Create a new note from Markdown. Returns the new note id.",
+		Description: "Create a new note from Markdown, optionally filed in a category. Returns the new note.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, in createNoteInput) (*mcp.CallToolResult, Note, error) {
-		note, err := t.notes.createTitled(in.Title, in.Body)
+		note, err := t.notes.createTitledIn(in.Title, in.Body, in.Category)
 		return nil, note, err
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "list_categories",
+		Description: "List the user's categories with their purpose descriptions and note counts. Read this before filing notes or summarising a category.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, in emptyInput) (*mcp.CallToolResult, listCategoriesOutput, error) {
+		items, err := t.categoryItems()
+		return nil, listCategoriesOutput{Categories: items}, err
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "create_category",
+		Description: "Create a category. The description should state what belongs there: it is how the user tells agents what to write into the category.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, in createCategoryInput) (*mcp.CallToolResult, Category, error) {
+		category, err := t.notes.CreateCategory(in.Name, in.Description)
+		return nil, category, err
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "list_category_notes",
+		Description: "Read the notes filed in a category, with full Markdown bodies, newest first. This is the source material for a summary.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, in categoryNotesInput) (*mcp.CallToolResult, categoryNotesOutput, error) {
+		category, notes, err := t.notes.categoryNotes(in.Category, in.Limit)
+		return nil, categoryNotesOutput{Category: category, Notes: notes}, err
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "set_note_category",
+		Description: "File an existing note in a category, or remove it from its category with an empty name.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, in setNoteCategoryInput) (*mcp.CallToolResult, Note, error) {
+		category, err := t.notes.resolveCategoryID(in.Category)
+		if err != nil {
+			return nil, Note{}, err
+		}
+		note, err := t.notes.AssignCategory(in.NoteID, category.ID)
+		return nil, note, err
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "get_journal_entry",
+		Description: "Return the daily log entry for a date, creating it from a template when it does not exist yet. An empty date means today.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, in journalInput) (*mcp.CallToolResult, Note, error) {
+		note, err := t.notes.JournalEntry(in.Date)
+		return nil, note, err
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "append_journal",
+		Description: "Append Markdown to a day's log entry, creating the entry if needed. Use it to record what happened without rewriting the page.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, in appendJournalInput) (*mcp.CallToolResult, Note, error) {
+		entry, err := t.notes.JournalEntry(in.Date)
+		if err != nil {
+			return nil, Note{}, err
+		}
+		note, err := t.notes.appendTo(entry.ID, in.Markdown)
+		return nil, note, err
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "list_journal",
+		Description: "List daily log entries in an inclusive YYYY-MM-DD range, newest first. Use it to build a track record over a week or month.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, in journalRangeInput) (*mcp.CallToolResult, journalListOutput, error) {
+		category, entries, err := t.notes.journalNotes(in.From, in.To)
+		return nil, journalListOutput{Category: category, Entries: entries}, err
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
@@ -589,6 +856,30 @@ func (t *mcpTools) handleUpdatePublished(ctx context.Context, req *mcp.CallToolR
 	}, nil
 }
 
+// categoryItems pairs each category with its note count for the tools and the
+// categories://index resource.
+func (t *mcpTools) categoryItems() ([]categoryListItem, error) {
+	categories, err := t.notes.Categories()
+	if err != nil {
+		return nil, err
+	}
+	summaries, err := t.notes.List()
+	if err != nil {
+		return nil, err
+	}
+	counts := make(map[string]int, len(categories))
+	for _, note := range summaries {
+		if note.CategoryID != "" {
+			counts[note.CategoryID]++
+		}
+	}
+	items := make([]categoryListItem, 0, len(categories))
+	for _, category := range categories {
+		items = append(items, categoryListItem{Category: category, Count: counts[category.ID]})
+	}
+	return items, nil
+}
+
 // --- resources --------------------------------------------------------------
 
 func registerMCPResources(server *mcp.Server, tools *mcpTools) {
@@ -606,11 +897,12 @@ func registerMCPResources(server *mcp.Server, tools *mcpTools) {
 		items := make([]noteListItem, 0, len(matches))
 		for _, note := range matches {
 			items = append(items, noteListItem{
-				ID:       note.ID,
-				Title:    note.Title,
-				Preview:  note.Preview,
-				Modified: note.Modified,
-				Status:   statuses[note.ID],
+				ID:         note.ID,
+				Title:      note.Title,
+				Preview:    note.Preview,
+				Modified:   note.Modified,
+				Status:     statuses[note.ID],
+				CategoryID: note.CategoryID,
 			})
 		}
 		raw, err := json.MarshalIndent(searchNotesOutput{Notes: items}, "", "  ")
@@ -639,6 +931,27 @@ func registerMCPResources(server *mcp.Server, tools *mcpTools) {
 			URI:      req.Params.URI,
 			MIMEType: "text/markdown",
 			Text:     composeDocument(note.Title, note.Body),
+		}}}, nil
+	})
+
+	server.AddResource(&mcp.Resource{
+		URI:         "categories://index",
+		Name:        "categories index",
+		Description: "JSON list of categories with their purpose descriptions and note counts.",
+		MIMEType:    "application/json",
+	}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		items, err := tools.categoryItems()
+		if err != nil {
+			return nil, err
+		}
+		raw, err := json.MarshalIndent(listCategoriesOutput{Categories: items}, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{
+			URI:      "categories://index",
+			MIMEType: "application/json",
+			Text:     string(raw),
 		}}}, nil
 	})
 
@@ -705,6 +1018,70 @@ func registerMCPPrompts(server *mcp.Server) {
 			}},
 		}, nil
 	})
+
+	server.AddPrompt(&mcp.Prompt{
+		Name:        "summarize_category",
+		Description: "Read every note in a category and write a summary back into the notes.",
+		Arguments: []*mcp.PromptArgument{
+			{Name: "category", Description: "category id or name from list_categories", Required: true},
+			{Name: "focus", Description: "optional angle for the summary, e.g. open decisions", Required: false},
+		},
+	}, func(ctx context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+		category := req.Params.Arguments["category"]
+		focus := req.Params.Arguments["focus"]
+		return &mcp.GetPromptResult{
+			Description: "Summarise a category",
+			Messages: []*mcp.PromptMessage{{
+				Role:    "user",
+				Content: &mcp.TextContent{Text: summarizeCategoryPrompt(category, focus)},
+			}},
+		}, nil
+	})
+
+	server.AddPrompt(&mcp.Prompt{
+		Name:        "track_record",
+		Description: "Turn a run of daily log entries into a track record note.",
+		Arguments: []*mcp.PromptArgument{
+			{Name: "from", Description: "first day, YYYY-MM-DD; empty means the last seven days", Required: false},
+			{Name: "to", Description: "last day, YYYY-MM-DD; empty means today", Required: false},
+		},
+	}, func(ctx context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+		from := req.Params.Arguments["from"]
+		to := req.Params.Arguments["to"]
+		return &mcp.GetPromptResult{
+			Description: "Write a track record",
+			Messages: []*mcp.PromptMessage{{
+				Role:    "user",
+				Content: &mcp.TextContent{Text: trackRecordPrompt(from, to)},
+			}},
+		}, nil
+	})
+}
+
+func summarizeCategoryPrompt(category, focus string) string {
+	category = strings.TrimSpace(category)
+	focus = strings.TrimSpace(focus)
+	if focus == "" {
+		focus = "the main themes, decisions, open questions and anything that has changed"
+	}
+	return fmt.Sprintf(`Summarise the category %q for the user.
+1. Call list_categories, then list_category_notes for %q to read the source notes.
+2. Cover %s.
+3. Refer to notes by title; do not dump their text back.
+4. Save the summary with create_note in the same category (or a summary category the user names) and say which note you created.
+Do not modify or delete the source notes.`, category, category, focus)
+}
+
+func trackRecordPrompt(from, to string) string {
+	period := "the last seven days"
+	if strings.TrimSpace(from) != "" || strings.TrimSpace(to) != "" {
+		period = strings.TrimSpace(from + " to " + to)
+	}
+	return fmt.Sprintf(`Build a track record from the user's daily log entries for %s.
+1. Call list_journal with from=%q and to=%q.
+2. Summarise progress, recurring themes, decisions and blockers, and what moved between the first and last entry.
+3. Write it with create_note in the Track record category, titled "Track record: <period>".
+4. List the entries you used. Do not invent events that are not in the logs.`, period, from, to)
 }
 
 func reviewNotePrompt(id string) string {

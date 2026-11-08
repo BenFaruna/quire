@@ -22,9 +22,10 @@ type ExternalChange struct {
 }
 
 const (
-	changeKindBody    = "body"
-	changeKindPlan    = "plan"
-	changeKindPublish = "publish"
+	changeKindBody     = "body"
+	changeKindPlan     = "plan"
+	changeKindPublish  = "publish"
+	changeKindCategory = "category"
 )
 
 // writeTracker remembers files this process just wrote so the watcher can
@@ -162,7 +163,9 @@ func (w *NotesWatcher) loop(ctx context.Context, watcher *fsnotify.Watcher) {
 		}
 		change := summarizeChanges(batch)
 		batch = make(map[string]string)
-		if len(change.NoteIDs) == 0 {
+		// Category changes are not tied to a note id, but the UI still needs
+		// to reload the category list when the MCP server edits it.
+		if len(change.NoteIDs) == 0 && !containsChangeKind(change.Kinds, changeKindCategory) {
 			return
 		}
 		w.emit(change)
@@ -185,7 +188,7 @@ func (w *NotesWatcher) loop(ctx context.Context, watcher *fsnotify.Watcher) {
 			if !ok {
 				continue
 			}
-			if kind == changeKindBody && w.tracker != nil && w.tracker.recentWrite(event.Name) {
+			if w.tracker != nil && (kind == changeKindBody || kind == changeKindCategory) && w.tracker.recentWrite(event.Name) {
 				continue
 			}
 			batch[event.Name] = kind
@@ -220,6 +223,9 @@ func (w *NotesWatcher) loop(ctx context.Context, watcher *fsnotify.Watcher) {
 // only the final name matters.
 func changeKindFor(path string) (string, bool) {
 	base := filepath.Base(path)
+	if strings.EqualFold(base, categoryStateName) {
+		return changeKindCategory, true
+	}
 	if strings.HasPrefix(base, ".") || strings.HasSuffix(base, ".bak") {
 		return "", false
 	}
@@ -243,6 +249,15 @@ func noteIDForChange(path string) string {
 		}
 	}
 	return ""
+}
+
+func containsChangeKind(kinds []string, kind string) bool {
+	for _, candidate := range kinds {
+		if candidate == kind {
+			return true
+		}
+	}
+	return false
 }
 
 func summarizeChanges(batch map[string]string) ExternalChange {

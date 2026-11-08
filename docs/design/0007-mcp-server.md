@@ -29,8 +29,16 @@ alongside the watcher and lock work. Publishing semantics remain owned by
   starts the server. There is no separate executable to find, package, or keep
   in sync.
 - **stdio is the transport.** stdout is reserved for protocol frames; all
-  diagnostics go to stderr via `log.SetOutput(os.Stderr)`. A stray print to
-  stdout corrupts the session.
+  diagnostics go to stderr. A stray print to stdout corrupts the session.
+- **Diagnostics survive a silent client.** The same lines are appended to
+  `<config dir>/post-planner/mcp.log` (rotated at 1 MiB), because clients
+  commonly discard their child's stderr. `POST_PLANNER_MCP_LOG` moves the file,
+  or `off` disables it. The SDK's `ServerOptions.Logger` and a receiving
+  middleware write through this logger, so the handshake and every traceable
+  method appear in one place.
+- **Nothing secret or bulky is logged.** Methods, tool names, durations and
+  errors are logged; tool arguments and results are not, since they contain
+  note bodies.
 - **The GUI does not need to be running.** The server opens the same notes
   directory lazily. Any MCP client can launch it as a subprocess.
 - **Services are shared, not reimplemented.** Tool handlers call
@@ -123,12 +131,14 @@ post-planner                 → Wails GUI, watcher, reminders
 post-planner mcp             → stdio MCP server
 
 runMCP():
+  logger  := newMCPLogger()          // stderr + <config>/post-planner/mcp.log
   notes   := NewNotesService()
   publish := NewPublishService(notes)
   planner := NewPlannerService(notes, publish)
-  server  := newMCPServer(notes, planner, publish)
+  notes.init()                       // resolve storage before the handshake
+  logger.Info("server starting", version, pid, executable, cwd, notes root)
+  server  := newMCPServer(notes, planner, publish, logger)
   signal.NotifyContext(SIGINT, SIGTERM)
-  log.SetOutput(os.Stderr)
   server.Run(ctx, &mcp.StdioTransport{})
 ```
 
@@ -312,7 +322,9 @@ normal user config directory, so it sees the same notes as the GUI.
 | Duplicate remote target | Refused with "use update_published instead". |
 | `update_published` without a target | Error before network. |
 | Sidecar write fails after remote success | Publish result carries a warning; the remote post exists. |
-| stdio client disconnects / SIGINT | Context canceled; `Run` returns; process exits cleanly. |
+| stdio client disconnects / SIGINT | Context canceled; `Run` returns; process exits cleanly, logged as `server stopped`. |
+| Notes directory unusable (permissions, no config dir) | Logged as `notes directory unavailable` with the error, before the handshake; the process exits non-zero. |
+| Client never launches the binary | No `server starting` line in the log; check the configured absolute `command` path. |
 | Malformed protocol input | Handled by the SDK; diagnostics go to stderr. |
 
 ## 8. Testing

@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -18,8 +21,13 @@ func newTestNotes(t *testing.T) (*NotesService, *PlannerService, *PublishService
 
 func connectTestMCP(t *testing.T, notes *NotesService, planner *PlannerService, publish *PublishService) *mcp.ClientSession {
 	t.Helper()
+	return connectTestMCPWithLogger(t, notes, planner, publish, nil)
+}
+
+func connectTestMCPWithLogger(t *testing.T, notes *NotesService, planner *PlannerService, publish *PublishService, logger *slog.Logger) *mcp.ClientSession {
+	t.Helper()
 	ctx := context.Background()
-	server := newMCPServer(notes, planner, publish)
+	server := newMCPServer(notes, planner, publish, logger)
 	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
 
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()
@@ -190,6 +198,43 @@ func TestMCPPublishRequiresConfirm(t *testing.T) {
 	}
 }
 
+// syncBuffer collects log output from handlers that may run on another
+// goroutine while the test reads it.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func TestMCPLogsRequests(t *testing.T) {
+	notes, planner, publish := newTestNotes(t)
+	var logs syncBuffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	session := connectTestMCPWithLogger(t, notes, planner, publish, logger)
+
+	callTool[searchNotesOutput](t, session, "search_notes", map[string]any{"query": "anything"})
+
+	output := logs.String()
+	if !strings.Contains(output, "method=tools/call") || !strings.Contains(output, "tool=search_notes") {
+		t.Fatalf("logs did not record the tool call:\n%s", output)
+	}
+	// The request line must carry the duration so a slow call is obvious.
+	if !strings.Contains(output, "duration=") {
+		t.Fatalf("logs did not record request durations:\n%s", output)
+	}
+}
+
 func TestMCPResources(t *testing.T) {
 	notes, planner, publish := newTestNotes(t)
 	session := connectTestMCP(t, notes, planner, publish)
@@ -213,5 +258,73 @@ func TestMCPResources(t *testing.T) {
 		URI: "notes://missing-note",
 	}); err == nil {
 		t.Fatal("missing note resource did not error")
+	}
+}
+
+func TestMCPCategoryAndJournalTools(t *testing.T) {
+	notes, planner, publish := newTestNotes(t)
+	session := connectTestMCP(t, notes, planner, publish)
+
+	category, _ := callTool[Category](t, session, "create_category", map[string]any{
+		"name":        "Client research",
+		"description": "Calls, constraints and follow-ups",
+	})
+	if category.ID == "" {
+		t.Fatal("create_category returned no id")
+	}
+
+	created, _ := callTool[Note](t, session, "create_note", map[string]any{
+		"title":    "Call notes",
+		"body":     "Decision: ship in November.",
+		"category": "client research",
+	})
+	if created.CategoryID != category.ID {
+		t.Fatalf("note category = %q, want %q", created.CategoryID, category.ID)
+	}
+
+	listed, _ := callTool[listCategoriesOutput](t, session, "list_categories", nil)
+	if len(listed.Categories) != 1 || listed.Categories[0].Count != 1 {
+		t.Fatalf("list_categories = %+v", listed.Categories)
+	}
+
+	read, _ := callTool[categoryNotesOutput](t, session, "list_category_notes", map[string]any{
+		"category": "Client research",
+	})
+	if len(read.Notes) != 1 || read.Notes[0].ID != created.ID || !strings.Contains(read.Notes[0].Body, "November") {
+		t.Fatalf("list_category_notes = %+v", read.Notes)
+	}
+
+	moved, _ := callTool[Note](t, session, "set_note_category", map[string]any{
+		"note_id":  created.ID,
+		"category": "",
+	})
+	if moved.CategoryID != "" {
+		t.Fatalf("set_note_category did not clear the category: %q", moved.CategoryID)
+	}
+
+	entry, _ := callTool[Note](t, session, "get_journal_entry", map[string]any{"date": "2026-11-08"})
+	if entry.Title != "2026-11-08" || entry.CategoryID == "" {
+		t.Fatalf("get_journal_entry = %+v", entry)
+	}
+	appended, _ := callTool[Note](t, session, "append_journal", map[string]any{
+		"date":     "2026-11-08",
+		"markdown": "- Shipped the category feature.",
+	})
+	if !strings.Contains(appended.Body, "Shipped the category feature") {
+		t.Fatalf("append_journal body = %q", appended.Body)
+	}
+
+	journal, _ := callTool[journalListOutput](t, session, "list_journal", map[string]any{
+		"from": "2026-11-01",
+		"to":   "2026-11-30",
+	})
+	if len(journal.Entries) != 1 || journal.Entries[0].ID != entry.ID {
+		t.Fatalf("list_journal = %+v", journal.Entries)
+	}
+
+	// A duplicate name must fail rather than silently creating a second bucket.
+	_, duplicate := callTool[Category](t, session, "create_category", map[string]any{"name": "Client research"})
+	if !duplicate.IsError {
+		t.Fatal("duplicate category name was accepted")
 	}
 }
