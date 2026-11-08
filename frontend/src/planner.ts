@@ -10,7 +10,7 @@ export interface PlannerHost {
     openPublishForSlot(noteID: string, slotID: string): Promise<void>;
     flushSave(): Promise<void>;
     confirm(title: string, message: string, action?: string): Promise<boolean>;
-    setScreen(screen: "notes" | "queue" | "calendar"): void;
+    setScreen(screen: "home" | "notes" | "queue" | "calendar"): void;
     refreshStatuses(): Promise<void>;
 }
 

@@ -30,10 +30,13 @@
         </header>
 
         <div class="segmented screen-toggle" id="screen-toggle" role="group" aria-label="Screen">
-            <button type="button" data-screen="notes" class="is-active">Notes</button>
+            <button type="button" data-screen="home" class="is-active">Home</button>
+            <button type="button" data-screen="notes">Notes</button>
             <button type="button" data-screen="queue">Queue</button>
             <button type="button" data-screen="calendar">Calendar</button>
         </div>
+
+        <div class="category-filter" id="category-filter" role="group" aria-label="Filter notes by category"></div>
 
         <div class="search">
             <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.65" y2="16.65"/></svg>
@@ -144,12 +147,19 @@
         </div>
 
         <section class="planner-view" id="planner-view" hidden></section>
+        <section class="home-view" id="home-view" hidden></section>
 
         <footer class="statusbar">
             <span id="word-count">0 words</span>
             <span class="dot">·</span>
             <span id="char-count">0 characters</span>
             <span class="spacer"></span>
+            <label class="status-category">
+                <span>Category</span>
+                <select id="note-category" aria-label="Note category" disabled>
+                    <option value="">Inbox</option>
+                </select>
+            </label>
             <span id="markdown-badge">Markdown</span>
         </footer>
 
@@ -344,6 +354,35 @@
             <button type="button" class="btn" id="publish-save-draft" hidden>Save draft</button>
             <button type="button" class="btn primary" id="publish-submit" hidden>Publish</button>
         </div>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="category-modal" hidden>
+    <div class="modal modal-category" role="dialog" aria-modal="true" aria-labelledby="category-modal-title">
+        <h2 id="category-modal-title">Categories</h2>
+        <p class="modal-sub">A category is where a certain kind of note lives. Write its purpose the way you would explain it to a collaborator — a model reads the same line before it writes anything.</p>
+
+        <ul class="category-manage-list" id="category-manage-list"></ul>
+
+        <form class="category-form" id="category-form">
+            <div class="category-form-head">
+                <span id="category-form-title">New category</span>
+                <button type="button" class="link-btn" id="category-reset" hidden>Stop editing</button>
+            </div>
+            <label class="category-field">
+                <span>Name</span>
+                <input id="category-name" type="text" maxlength="60" autocomplete="off" spellcheck="false" placeholder="e.g. Client research" required/>
+            </label>
+            <label class="category-field">
+                <span>What is this category for?</span>
+                <textarea id="category-description" rows="2" maxlength="400" placeholder="Notes from client calls: decisions, open questions, follow-ups."></textarea>
+            </label>
+            <p class="category-error" id="category-error" hidden></p>
+            <div class="modal-actions">
+                <button type="button" class="btn" id="category-cancel">Close</button>
+                <button type="submit" class="btn primary" id="category-save">Create category</button>
+            </div>
+        </form>
     </div>
 </div>
 

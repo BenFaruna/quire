@@ -3,7 +3,7 @@ import "./style.css";
 import { Browser, Dialogs, Events } from "@wailsio/runtime";
 import * as NotesService from "../bindings/post-planner/notesservice.js";
 import * as PlannerService from "../bindings/post-planner/plannerservice.js";
-import type { Note, NoteSummary } from "../bindings/post-planner/models.js";
+import type { Category, Note, NoteSummary } from "../bindings/post-planner/models.js";
 import { isPublishOpen, openPublishModal } from "./publish.js";
 import {
     initPlanner,
@@ -11,6 +11,7 @@ import {
     renderPlannerScreen,
     type PlannerHost,
 } from "./planner.js";
+import { initHome, openCategoryDialog, renderHomeScreen, type HomeHost } from "./home.js";
 
 // ---------------------------------------------------------------------------
 // DOM
@@ -44,6 +45,9 @@ const topbarMenu = document.getElementById("topbar-menu") as HTMLDivElement;
 const menuExport = document.getElementById("menu-export") as HTMLButtonElement;
 const menuDelete = document.getElementById("menu-delete") as HTMLButtonElement;
 const plannerView = document.getElementById("planner-view") as HTMLElement;
+const homeView = document.getElementById("home-view") as HTMLElement;
+const categoryFilterBar = document.getElementById("category-filter") as HTMLDivElement;
+const noteCategory = document.getElementById("note-category") as HTMLSelectElement;
 const exportModal = document.getElementById("export-modal") as HTMLDivElement;
 const exportList = document.getElementById("export-list") as HTMLUListElement;
 const exportSelectAll = document.getElementById("export-select-all") as HTMLInputElement;
@@ -72,6 +76,9 @@ const diskKeep = document.getElementById("disk-keep") as HTMLButtonElement;
 // ---------------------------------------------------------------------------
 
 let notes: NoteSummary[] = [];
+let categories: Category[] = [];
+// null means every category; an empty string means the uncategorised notes.
+let categoryFilter: string | null = null;
 let activeId: string | null = null;
 let dirty = false;
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -84,7 +91,7 @@ let confirmResolve: ((confirmed: boolean) => void) | null = null;
 let confirmReturnFocus: HTMLElement | null = null;
 
 type ViewMode = "edit" | "split" | "preview";
-type Screen = "notes" | "queue" | "calendar";
+type Screen = "home" | "notes" | "queue" | "calendar";
 
 const MOBILE_QUERY = "(max-width: 760px)";
 const SPLIT_QUERY = "(min-width: 761px)";
@@ -313,9 +320,13 @@ function syncLayout() {
 // ---------------------------------------------------------------------------
 
 function filteredNotes(): NoteSummary[] {
+    const scoped =
+        categoryFilter === null
+            ? notes
+            : notes.filter((note) => (note.categoryId || "") === categoryFilter);
     const query = searchInput.value.trim().toLowerCase();
-    if (!query) return notes;
-    return notes.filter(
+    if (!query) return scoped;
+    return scoped.filter(
         (note) =>
             note.title.toLowerCase().includes(query) ||
             note.preview.toLowerCase().includes(query),
@@ -408,7 +419,15 @@ function renderList() {
         for (const note of visible) noteList.append(createNoteItem(note));
     }
 
-    listEmpty.hidden = visible.length !== 0 || notes.length === 0;
+    listEmpty.hidden = visible.length !== 0;
+    if (visible.length === 0) {
+        listEmpty.textContent =
+            notes.length === 0
+                ? "No notes yet. Create one to start writing."
+                : categoryFilter !== null
+                  ? "No notes in this category yet."
+                  : "No notes match your search.";
+    }
     searchClear.hidden = searchInput.value.length === 0;
     notesCount.textContent = `${notes.length} ${notes.length === 1 ? "note" : "notes"}`;
 }
@@ -428,6 +447,7 @@ async function loadNotes() {
         notes = (await NotesService.List()) ?? [];
         await loadStatuses();
         renderList();
+        renderCategoryFilter();
     } catch (err) {
         reportError("Could not load notes", err);
     }
@@ -450,6 +470,120 @@ async function loadStatuses() {
 async function refreshStatuses() {
     await loadStatuses();
     renderList();
+}
+
+// ---------------------------------------------------------------------------
+// Categories
+// ---------------------------------------------------------------------------
+
+async function loadCategories() {
+    try {
+        categories = (await NotesService.Categories()) ?? [];
+    } catch (err) {
+        categories = [];
+        reportError("Could not load categories", err);
+    }
+    // A category deleted here or by an agent must not leave the list filtered
+    // on something that no longer exists.
+    if (
+        categoryFilter !== null &&
+        categoryFilter !== "" &&
+        !categories.some((category) => category.id === categoryFilter)
+    ) {
+        categoryFilter = null;
+    }
+    populateNoteCategory();
+    renderCategoryFilter();
+}
+
+function countNotesIn(categoryID: string): number {
+    return notes.reduce(
+        (total, note) => total + ((note.categoryId || "") === categoryID ? 1 : 0),
+        0,
+    );
+}
+
+function categoryName(id: string): string {
+    return categories.find((category) => category.id === id)?.name ?? "category";
+}
+
+function categoryChip(
+    label: string,
+    count: number,
+    active: boolean,
+    onClick: () => void,
+): HTMLButtonElement {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "category-chip";
+    chip.classList.toggle("is-active", active);
+    chip.setAttribute("aria-pressed", String(active));
+    const name = document.createElement("span");
+    name.textContent = label;
+    const badge = document.createElement("span");
+    badge.className = "category-chip-count";
+    badge.textContent = String(count);
+    chip.append(name, badge);
+    chip.addEventListener("click", onClick);
+    return chip;
+}
+
+function renderCategoryFilter() {
+    categoryFilterBar.replaceChildren();
+    categoryFilterBar.append(
+        categoryChip("All", notes.length, categoryFilter === null, () => setCategoryFilter(null)),
+    );
+    categoryFilterBar.append(
+        categoryChip("Inbox", countNotesIn(""), categoryFilter === "", () => setCategoryFilter("")),
+    );
+    for (const category of categories) {
+        categoryFilterBar.append(
+            categoryChip(category.name, countNotesIn(category.id), categoryFilter === category.id, () =>
+                setCategoryFilter(category.id),
+            ),
+        );
+    }
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "category-chip is-add";
+    add.title = "New category";
+    add.setAttribute("aria-label", "New category");
+    add.textContent = "+";
+    add.addEventListener("click", () => openCategoryDialog());
+    categoryFilterBar.append(add);
+}
+
+function setCategoryFilter(next: string | null) {
+    categoryFilter = next;
+    renderCategoryFilter();
+    renderList();
+    if (screen !== "notes") setScreen("notes");
+}
+
+function populateNoteCategory() {
+    noteCategory.replaceChildren();
+    const inbox = document.createElement("option");
+    inbox.value = "";
+    inbox.textContent = "Inbox";
+    noteCategory.append(inbox);
+    for (const category of categories) {
+        const option = document.createElement("option");
+        option.value = category.id;
+        option.textContent = category.name;
+        noteCategory.append(option);
+    }
+    syncNoteCategory();
+}
+
+function syncNoteCategory() {
+    if (!activeId) {
+        noteCategory.value = "";
+        noteCategory.disabled = true;
+        return;
+    }
+    const summary = notes.find((note) => note.id === activeId);
+    noteCategory.value = summary?.categoryId ?? "";
+    noteCategory.disabled = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -496,9 +630,13 @@ async function handleExternalChange(raw: unknown) {
     const kinds = Array.isArray(change.kinds)
         ? change.kinds.filter((value): value is string => typeof value === "string")
         : [];
-    if (ids.length === 0) return;
+    const categoryChanged = kinds.includes("category");
+    if (ids.length === 0 && !categoryChanged) return;
 
+    if (categoryChanged) await loadCategories();
     await loadNotes();
+    syncNoteCategory();
+    if (screen === "home") void renderHomeScreen();
 
     const id = activeId;
     if (!id) return;
@@ -540,6 +678,7 @@ async function handleExternalChange(raw: unknown) {
 
 function setEditorEnabled(enabled: boolean) {
     titleInput.disabled = !enabled;
+    noteCategory.disabled = !enabled;
     editor.disabled = !enabled;
     deleteButton.disabled = !enabled;
     menuDelete.disabled = !enabled;
@@ -564,6 +703,7 @@ async function selectNote(id: string, options: { force?: boolean } = {}) {
         if (token !== selectSeq) return;
 
         activeId = note.id;
+        syncNoteCategory();
         titleInput.value = note.title;
         editor.value = note.body;
         dirty = false;
@@ -648,10 +788,12 @@ function reportError(context: string, err: unknown) {
 // Create / delete
 // ---------------------------------------------------------------------------
 
-async function createNote() {
+async function createNote(categoryID?: string) {
     await flushSave();
+    const target = categoryID !== undefined ? categoryID : categoryFilter ?? "";
     try {
-        const note = await NotesService.Create();
+        const note = await NotesService.CreateIn(target);
+        setScreen("notes");
         await loadNotes();
         await selectNote(note.id, { force: true });
         renderPreview();
@@ -678,9 +820,11 @@ async function importNotes() {
         const paths = Array.isArray(selected) ? selected : selected ? [selected] : [];
         if (paths.length === 0) return;
 
-        const imported = (await NotesService.Import(paths)) ?? [];
+        const imported =
+            (await NotesService.ImportInto(paths, categoryFilter ?? "")) ?? [];
         if (imported.length === 0) return;
 
+        setScreen("notes");
         await loadNotes();
         await selectNote(imported[0].id, { force: true });
         showToast(
@@ -909,8 +1053,10 @@ function setScreen(next: Screen) {
     for (const button of screenToggle.querySelectorAll<HTMLButtonElement>("button")) {
         button.classList.toggle("is-active", button.dataset.screen === next);
     }
-    plannerView.hidden = next === "notes";
-    if (next !== "notes") void renderPlannerScreen(next);
+    plannerView.hidden = next !== "queue" && next !== "calendar";
+    homeView.hidden = next !== "home";
+    if (next === "queue" || next === "calendar") void renderPlannerScreen(next);
+    if (next === "home") void renderHomeScreen();
 }
 
 const plannerHost: PlannerHost = {
@@ -935,6 +1081,44 @@ const plannerHost: PlannerHost = {
     confirm: confirmDestructive,
     setScreen,
     refreshStatuses,
+};
+
+const homeHost: HomeHost = {
+    showToast,
+    data: () => ({ categories, notes }),
+    async refresh() {
+        await loadCategories();
+        await loadNotes();
+    },
+    async newNote(categoryID?: string) {
+        await createNote(categoryID);
+    },
+    async openTodayJournal() {
+        try {
+            const note = await NotesService.JournalEntry("");
+            await loadCategories();
+            await loadNotes();
+            setScreen("notes");
+            await selectNote(note.id, { force: true });
+            if (isMobileViewport()) closeSidebar();
+        } catch (err) {
+            reportError("Could not open today's log", err);
+        }
+    },
+    async openNote(id: string) {
+        await flushSave();
+        setScreen("notes");
+        await selectNote(id, { force: true });
+    },
+    async filterNotes(categoryID: string | null) {
+        await flushSave();
+        setScreen("notes");
+        categoryFilter = categoryID;
+        renderCategoryFilter();
+        renderList();
+    },
+    setScreen: (next) => setScreen(next),
+    confirm: confirmDestructive,
 };
 
 // ---------------------------------------------------------------------------
@@ -1370,6 +1554,22 @@ screenToggle.addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-screen]");
     if (button) setScreen(button.dataset.screen as Screen);
 });
+
+noteCategory.addEventListener("change", async () => {
+    if (!activeId) return;
+    const id = activeId;
+    try {
+        const note = await NotesService.AssignCategory(id, noteCategory.value);
+        const summary = notes.find((candidate) => candidate.id === id);
+        if (summary) summary.categoryId = note.categoryId;
+        renderCategoryFilter();
+        renderList();
+        showToast(note.categoryId ? `Filed in ${categoryName(note.categoryId)}` : "Moved to Inbox");
+    } catch (err) {
+        reportError("Could not move note", err);
+        syncNoteCategory();
+    }
+});
 window.addEventListener("planner:refresh-statuses", () => void refreshStatuses());
 Events.On("notes:external-change", (event) => {
     void handleExternalChange(event.data);
@@ -1556,8 +1756,9 @@ async function boot() {
     updateStats();
     collapsedStatuses = new Set(loadCollapsedStatuses());
     initPlanner(plannerHost);
-    setScreen("notes");
+    initHome(homeHost);
 
+    await loadCategories();
     await loadNotes();
 
     const lastId = storage.get(LAST_NOTE_KEY);
@@ -1567,6 +1768,9 @@ async function boot() {
     } else {
         renderList();
     }
+    // The opening page is the entry point; the last note is already loaded
+    // behind it, so switching to Notes resumes where the user left off.
+    setScreen("home");
 }
 
 void boot();
