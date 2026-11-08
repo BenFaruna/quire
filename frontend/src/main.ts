@@ -377,7 +377,13 @@ function createNoteItem(note: NoteSummary): HTMLLIElement {
     meta.append(time, snippet);
 
     button.append(title, meta);
-    button.addEventListener("click", () => void selectNote(note.id));
+    button.addEventListener("click", () => {
+        // The sidebar is visible on every screen, so a click on a note always
+        // means "show me this note" rather than just changing the selection
+        // behind Home or the planner.
+        if (screen !== "notes") setScreen("notes");
+        void selectNote(note.id);
+    });
     item.append(button);
     return item;
 }
