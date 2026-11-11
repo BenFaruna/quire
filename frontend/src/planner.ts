@@ -1,7 +1,7 @@
 import "./plan.css";
 import { Events } from "@wailsio/runtime";
-import * as PlannerService from "../bindings/post-planner/plannerservice.js";
-import type { BacklogItem, PlanState, QueueItem } from "../bindings/post-planner/models.js";
+import * as PlannerService from "../bindings/quire/plannerservice.js";
+import type { BacklogItem, PlanState, QueueItem } from "../bindings/quire/models.js";
 import { PLATFORMS, platformAbbr, platformLabel } from "./platforms.js";
 
 export interface PlannerHost {

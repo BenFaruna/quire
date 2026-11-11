@@ -1,6 +1,6 @@
 import "./home.css";
-import * as NotesService from "../bindings/post-planner/notesservice.js";
-import type { Category, NoteSummary } from "../bindings/post-planner/models.js";
+import * as NotesService from "../bindings/quire/notesservice.js";
+import type { Category, NoteSummary } from "../bindings/quire/models.js";
 
 // The home screen is the front door: it says where this note belongs and what
 // each place is for. It is built from the same data the sidebar uses, so a

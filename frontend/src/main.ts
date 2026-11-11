@@ -1,9 +1,9 @@
 import "katex/dist/katex.min.css";
 import "./style.css";
 import { Browser, Dialogs, Events } from "@wailsio/runtime";
-import * as NotesService from "../bindings/post-planner/notesservice.js";
-import * as PlannerService from "../bindings/post-planner/plannerservice.js";
-import type { Category, Note, NoteSummary } from "../bindings/post-planner/models.js";
+import * as NotesService from "../bindings/quire/notesservice.js";
+import * as PlannerService from "../bindings/quire/plannerservice.js";
+import type { Category, Note, NoteSummary } from "../bindings/quire/models.js";
 import { isPublishOpen, openPublishModal } from "./publish.js";
 import {
     initPlanner,

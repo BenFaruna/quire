@@ -1,6 +1,6 @@
 import { Browser } from "@wailsio/runtime";
-import * as PublishService from "../bindings/post-planner/publishservice.js";
-import * as PlannerService from "../bindings/post-planner/plannerservice.js";
+import * as PublishService from "../bindings/quire/publishservice.js";
+import * as PlannerService from "../bindings/quire/plannerservice.js";
 import type {
     Draft,
     PrepareOptions,
@@ -8,7 +8,7 @@ import type {
     PublishRequest,
     PublishState,
     Rendition,
-} from "../bindings/post-planner/models.js";
+} from "../bindings/quire/models.js";
 
 // X and LinkedIn are local-only: the app shapes the text and hands it to the
 // clipboard or the platform composer. dev.to and Hashnode publish directly with
