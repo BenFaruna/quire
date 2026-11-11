@@ -46,7 +46,8 @@ const menuExport = document.getElementById("menu-export") as HTMLButtonElement;
 const menuDelete = document.getElementById("menu-delete") as HTMLButtonElement;
 const plannerView = document.getElementById("planner-view") as HTMLElement;
 const homeView = document.getElementById("home-view") as HTMLElement;
-const categoryFilterBar = document.getElementById("category-filter") as HTMLDivElement;
+const categoryFilterSelect = document.getElementById("category-filter") as HTMLSelectElement;
+const newCategoryButton = document.getElementById("new-category") as HTMLButtonElement;
 const groupToggle = document.getElementById("group-toggle") as HTMLDivElement;
 const noteCategory = document.getElementById("note-category") as HTMLSelectElement;
 const exportModal = document.getElementById("export-modal") as HTMLDivElement;
@@ -569,50 +570,29 @@ function categoryName(id: string): string {
     return categories.find((category) => category.id === id)?.name ?? "category";
 }
 
-function categoryChip(
-    label: string,
-    count: number,
-    active: boolean,
-    onClick: () => void,
-): HTMLButtonElement {
-    const chip = document.createElement("button");
-    chip.type = "button";
-    chip.className = "category-chip";
-    chip.classList.toggle("is-active", active);
-    chip.setAttribute("aria-pressed", String(active));
-    const name = document.createElement("span");
-    name.textContent = label;
-    const badge = document.createElement("span");
-    badge.className = "category-chip-count";
-    badge.textContent = String(count);
-    chip.append(name, badge);
-    chip.addEventListener("click", onClick);
-    return chip;
-}
+// A select cannot carry null, and "" already means the inbox, so "All notes"
+// needs a value of its own.
+const ALL_CATEGORIES = "*";
 
 function renderCategoryFilter() {
-    categoryFilterBar.replaceChildren();
-    categoryFilterBar.append(
-        categoryChip("All", notes.length, categoryFilter === null, () => setCategoryFilter(null)),
+    const option = (value: string, label: string, count: number): HTMLOptionElement => {
+        const element = document.createElement("option");
+        element.value = value;
+        element.textContent = `${label} (${count})`;
+        return element;
+    };
+    categoryFilterSelect.replaceChildren(
+        option(ALL_CATEGORIES, "All notes", notes.length),
+        option("", "Inbox", countNotesIn("")),
+        ...categories.map((category) =>
+            option(category.id, category.name, countNotesIn(category.id)),
+        ),
     );
-    categoryFilterBar.append(
-        categoryChip("Inbox", countNotesIn(""), categoryFilter === "", () => setCategoryFilter("")),
-    );
-    for (const category of categories) {
-        categoryFilterBar.append(
-            categoryChip(category.name, countNotesIn(category.id), categoryFilter === category.id, () =>
-                setCategoryFilter(category.id),
-            ),
-        );
-    }
-    const add = document.createElement("button");
-    add.type = "button";
-    add.className = "category-chip is-add";
-    add.title = "New category";
-    add.setAttribute("aria-label", "New category");
-    add.textContent = "+";
-    add.addEventListener("click", () => openCategoryDialog());
-    categoryFilterBar.append(add);
+    categoryFilterSelect.value = categoryFilter ?? ALL_CATEGORIES;
+    categoryFilterSelect.onchange = () => {
+        const next = categoryFilterSelect.value;
+        setCategoryFilter(next === ALL_CATEGORIES ? null : next);
+    };
 }
 
 function setCategoryFilter(next: string | null) {
@@ -1612,6 +1592,7 @@ emptyNewButton.addEventListener("click", () => void createNote());
 deleteButton.addEventListener("click", () => void deleteNote());
 publishButton.addEventListener("click", () => void publishNote());
 scheduleButton.addEventListener("click", scheduleNote);
+newCategoryButton.addEventListener("click", () => openCategoryDialog());
 screenToggle.addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-screen]");
     if (button) setScreen(button.dataset.screen as Screen);

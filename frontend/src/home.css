@@ -331,56 +331,49 @@
 
 .category-filter {
     display: flex;
-    gap: 6px;
-    padding: 2px 14px 9px;
-    overflow-x: auto;
-    scrollbar-width: none;
-}
-
-.category-filter::-webkit-scrollbar {
-    display: none;
-}
-
-.category-chip {
-    display: inline-flex;
-    flex: 0 0 auto;
     align-items: center;
     gap: 6px;
-    padding: 4px 9px;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    background: transparent;
-    color: var(--text-muted);
-    font-size: 11.5px;
-    white-space: nowrap;
+    padding: 2px 12px 9px;
 }
 
-.category-chip:hover {
+/* One row whatever the category count: the label ellipsises instead. */
+.category-filter select {
+    flex: 1;
+    min-width: 0;
+    min-height: 28px;
+    padding: 4px 24px 4px 9px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background-color: var(--bg-elevated);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%238b95a1' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 9px 6px;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    appearance: none;
+    -webkit-appearance: none;
+    outline: none;
+}
+
+.category-filter select:hover,
+.category-filter select:focus-visible {
     border-color: var(--border-strong);
     color: var(--text);
 }
 
-.category-chip.is-active {
-    border-color: rgba(232, 181, 99, 0.36);
-    background: var(--accent-soft);
-    color: var(--accent-strong);
+.category-filter select option {
+    background: #0c1117;
+    color: var(--text);
 }
 
-.category-chip-count {
-    color: var(--text-dim);
-    font-size: 10px;
-    font-weight: 600;
-}
-
-.category-chip.is-active .category-chip-count {
-    color: var(--accent);
-}
-
-.category-chip.is-add {
-    padding: 4px 10px;
-    font-size: 13px;
-    font-weight: 600;
-    line-height: 1;
+.category-filter .icon-btn {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
 }
 
 /* Note category selector in the status bar --------------------------------- */
