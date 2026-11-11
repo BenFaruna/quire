@@ -9,4 +9,13 @@ export default defineConfig({
     strictPort: true,
   },
   plugins: [wails("./bindings")],
+  build: {
+    // Mermaid ships its layout engines as separate modules - elk is ~1.4 MB and
+    // the shared diagram chunk ~600 kB - and they are fetched only when a note
+    // contains a diagram. index.html loads just the entry bundle (~95 kB), so
+    // the default 500 kB gate can only ever fire for those lazy vendor chunks.
+    // Keep the gate just above the largest of them, so a real regression in the
+    // eagerly loaded bundle still trips it.
+    chunkSizeWarningLimit: 1600,
+  },
 });
