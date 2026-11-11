@@ -12,7 +12,7 @@ priority: "extra"
 maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
 description: "A local-first Markdown notebook"
 vendor: "BenNotes"
-homepage: "https://wails.io"
+homepage: "https://github.com/BenFaruna/quire"
 license: "MIT"
 release: "1"
 
