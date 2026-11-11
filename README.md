@@ -337,6 +337,10 @@ disk image shows. Both are defaults and can be overridden per run.
 
 ### Rendering the PNGs
 
+`wails3 task icons` runs every step on this page, in order, from the SVGs to the
+committed binaries. The commands are spelled out below so a single step can be
+re-run by hand when one of them fails.
+
 `appicon.svg` and `dmg-file-icon.svg` share the same Q geometry; the DMG icon
 adds the graph grid, the glow and the volume ribbon. Render them with
 ImageMagick's librsvg backend:
@@ -358,10 +362,11 @@ wails3 generate icons -input appicon.png -macfilename darwin/icons.icns -windows
 wails3 generate icons -input darwin/dmg-file-icon.png -macfilename darwin/dmg-file-icon.icns -windowsfilename /tmp/discard.ico
 ```
 
-Android round icons come from the same `appicon.png` through a circle mask, and
-its launcher mipmaps are committed alongside it. Keep `--` out of the SVG header
-comments: a double hyphen is illegal inside an XML comment, and librsvg then
-refuses the whole document.
+Android launcher icons come from the same `appicon.png` at five densities, the
+`_round` variants clipped by an ImageMagick circle mask of exactly the tile size
+(`circle N/2,N/2 N/2,0`, no inset). Keep `--` out of the SVG header comments: a
+double hyphen is illegal inside an XML comment, and librsvg then refuses the
+whole document.
 
 ### The macOS `actool` step
 
@@ -373,8 +378,9 @@ Linux or Windows.
 
 `task darwin:package` reaches it through `common:generate:icons` in
 `build/Taskfile.yml`, which passes `-iconcomposerinput appicon.icon
--macassetdir darwin`. Anywhere else `wails3 generate icons` skips that half and
-refreshes only the `.icns` and `.ico`.
+-macassetdir darwin`. `wails3 task icons` makes the same call, so on a Mac a single run
+rebuilds `Assets.car` along with everything else. Anywhere else `wails3 generate
+icons` skips that half and refreshes only the `.icns` and `.ico`.
 
 When `Assets.car` sits next to `icons.icns` in `Contents/Resources`, macOS 26
 prefers it. The bundle sets no `CFBundleIconName`, and the system falls back to

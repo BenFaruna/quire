@@ -39,6 +39,11 @@ tasks:
     cmds:
       - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
 
+  icons:
+    summary: Rebuilds every icon and DMG asset from the SVG sources
+    cmds:
+      - task: common:generate:artwork
+
   install:msix:tools:
     summary: Installs tools required for Windows MSIX packaging
     cmds:

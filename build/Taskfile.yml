@@ -203,6 +203,46 @@ tasks:
     cmds:
       - wails3 generate icons -input appicon.png -macfilename darwin/icons.icns -windowsfilename windows/icon.ico -iconcomposerinput appicon.icon -macassetdir darwin
 
+  generate:artwork:
+    summary: Rebuilds every icon and DMG asset from the SVG sources in `build/` — app icon, `.dmg` file icon, DMG background, the Android launcher mipmaps, then the `.icns`/`.ico` containers (and `Assets.car` on macOS).
+    desc: |
+      Rasterises appicon.svg, darwin/dmg-file-icon.svg and darwin/dmg-background.svg
+      with ImageMagick, writes the five Android launcher densities, then hands the
+      PNGs to `wails3 generate icons`. Deterministic: the committed assets are
+      exactly what this task produces, so a run on a clean tree changes nothing.
+
+      Usage: wails3 task icons
+    run: once
+    dir: build
+    preconditions:
+      - sh: command -v magick > /dev/null 2>&1
+        msg: "ImageMagick is required to rasterise the SVG artwork: https://imagemagick.org/script/download.php"
+    cmds:
+      - magick -background none appicon.svg -resize 1024x1024 -depth 8 -strip appicon.png
+      - magick -background none darwin/dmg-file-icon.svg -resize 1254x1254 -depth 8 -strip PNG32:darwin/dmg-file-icon.png
+      - >-
+        magick -background '#efe7d6' darwin/dmg-background.svg -flatten -resize 540x380
+        -depth 8 -strip PNG24:darwin/dmg-background.png
+      - |
+        for spec in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
+          density=${spec%%:*}
+          size=${spec##*:}
+          centre=$((size / 2))
+          out=android/app/src/main/res/mipmap-$density
+          magick appicon.png -resize "${size}x${size}" -depth 8 -strip "$out/ic_launcher.png"
+          magick appicon.png -resize "${size}x${size}" \
+            \( -size "${size}x${size}" xc:black -fill white -draw "circle $centre,$centre $centre,0" \) \
+            -alpha off -compose CopyOpacity -composite -depth 8 -strip "$out/ic_launcher_round.png"
+        done
+      # The DMG file icon only needs a .icns; park its Windows .ico somewhere
+      # throwaway so it cannot overwrite the app's.
+      - >-
+        wails3 generate icons -input appicon.png -macfilename darwin/icons.icns
+        -windowsfilename windows/icon.ico -iconcomposerinput appicon.icon -macassetdir darwin
+      - >-
+        wails3 generate icons -input darwin/dmg-file-icon.png -macfilename darwin/dmg-file-icon.icns
+        -windowsfilename "${TMPDIR:-/tmp}/quire-dmg-icon-discard.ico"
+
   dev:frontend:
     summary: Runs the frontend in development mode
     deps:
