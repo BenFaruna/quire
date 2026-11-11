@@ -92,8 +92,6 @@ func runMCP() error {
 const (
 	// mcpLogEnv moves the log file (or disables it with "off").
 	mcpLogEnv = "QUIRE_MCP_LOG"
-	// mcpLogEnvLegacy is the variable name used before the app was renamed.
-	mcpLogEnvLegacy = "POST_PLANNER_MCP_LOG"
 	// mcpLogMaxBytes caps the file; it is rotated to a single .1 backup.
 	mcpLogMaxBytes = 1 << 20
 )
@@ -129,9 +127,6 @@ func newMCPLogger() (*slog.Logger, string, io.Closer) {
 // directory next to the notes.
 func mcpLogPath() string {
 	if path, set := mcpLogFromEnv(mcpLogEnv); set {
-		return path
-	}
-	if path, set := mcpLogFromEnv(mcpLogEnvLegacy); set {
 		return path
 	}
 	appDir, err := appConfigDir()

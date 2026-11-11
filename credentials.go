@@ -17,10 +17,6 @@ import (
 // used as a fallback. The fallback is reported to the UI so the user knows.
 const credentialService = "quire-publishing"
 
-// legacyCredentialService holds keys saved before the app was renamed. Reads
-// fall back to it and a disconnect clears both, so connecting once is enough.
-const legacyCredentialService = "post-planner-publishing"
-
 const (
 	credentialBackendKeychain = "keychain"
 	credentialBackendFile     = "file"
@@ -82,7 +78,7 @@ func (s *credentialStore) get(platform string) (providerCredentials, string, boo
 		return creds, credentialBackendFile, found, err
 	}
 
-	if raw, err := keyringGet(platform); err == nil {
+	if raw, err := keyring.Get(credentialService, platform); err == nil {
 		creds, decodeErr := decodeCredentials(raw)
 		if decodeErr != nil {
 			return providerCredentials{}, credentialBackendKeychain, false,
@@ -128,18 +124,8 @@ func (s *credentialStore) delete(platform string) error {
 
 	if !s.forceFile {
 		_ = keyring.Delete(credentialService, platform)
-		_ = keyring.Delete(legacyCredentialService, platform)
 	}
 	return s.removeFile(platform)
-}
-
-// keyringGet reads a provider blob, retrying under the service name used
-// before the rename so existing connections keep working.
-func keyringGet(platform string) (string, error) {
-	if raw, err := keyring.Get(credentialService, platform); err == nil {
-		return raw, nil
-	}
-	return keyring.Get(legacyCredentialService, platform)
 }
 
 func (s *credentialStore) path(platform string) string {
