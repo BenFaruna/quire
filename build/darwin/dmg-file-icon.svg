@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Quire">
+  <title>Quire</title>
+
+  <!--
+    Quire DMG volume icon (source for darwin/dmg-file-icon.png + .icns).
+    Edit knobs:
+      tile     rect x/y 112, side 800, rx 181   (~11% margin, macOS icon grid)
+      Q ring   centre (497,505), path radius 210, stroke width 116
+               outer 268, inner 152; the tail is the same stroke with a round cap
+      tail     M645 653 to 890 898 (45 degrees, clipped by the tile corner)
+      amber    #F8DFAE > #F3C97F > #E8AE57 > #D5953A, userSpaceOnUse 330,240 to 820,820
+      ribbon   x 684 to 738, y 112 to 356, notch apex at 711,328
+      motif    dashed r136, solid r114: hash, chevron, needle
+    Render: magick -background none dmg-file-icon.svg -resize 1254x1254 dmg-file-icon.png
+  -->
+
+  <defs>
+    <clipPath id="tileClip">
+      <rect x="112" y="112" width="800" height="800" rx="181"/>
+    </clipPath>
+
+    <linearGradient id="tileInk" x1="112" y1="112" x2="912" y2="912" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#28323F"/>
+      <stop offset="0.42" stop-color="#141A22"/>
+      <stop offset="1" stop-color="#080B0F"/>
+    </linearGradient>
+
+    <radialGradient id="bowlGlow" cx="497" cy="560" r="430" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E9A63E" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#E9A63E" stop-opacity="0"/>
+    </radialGradient>
+
+    <radialGradient id="bowlShade" cx="497" cy="505" r="158" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#04070A" stop-opacity="0.62"/>
+      <stop offset="0.72" stop-color="#04070A" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#04070A" stop-opacity="0.05"/>
+    </radialGradient>
+
+    <linearGradient id="amber" x1="330" y1="240" x2="820" y2="820" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F8DFAE"/>
+      <stop offset="0.34" stop-color="#F3C97F"/>
+      <stop offset="0.70" stop-color="#E8AE57"/>
+      <stop offset="1" stop-color="#D5953A"/>
+    </linearGradient>
+
+    <linearGradient id="ribbon" x1="684" y1="112" x2="738" y2="356" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F97A57"/>
+      <stop offset="0.6" stop-color="#E0503A"/>
+      <stop offset="1" stop-color="#BE3323"/>
+    </linearGradient>
+
+    <filter id="amberGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+
+    <filter id="ribbonShade" x="-60%" y="-30%" width="220%" height="180%">
+      <feDropShadow dx="-7" dy="9" stdDeviation="9" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <g clip-path="url(#tileClip)">
+    <!-- tile -->
+    <rect x="112" y="112" width="800" height="800" fill="url(#tileInk)"/>
+    <rect x="112" y="112" width="800" height="800" fill="url(#bowlGlow)"/>
+
+    <!-- graph paper -->
+    <g stroke="#FFFFFF" stroke-opacity="0.045" stroke-width="2">
+      <path d="M312 112V912 M512 112V912 M712 112V912"/>
+      <path d="M112 312H912 M112 512H912 M112 712H912"/>
+    </g>
+    <path d="M186 300V828" stroke="#F2C87E" stroke-opacity="0.20" stroke-width="9" stroke-linecap="round"/>
+
+    <!-- bookmark ribbon -->
+    <g filter="url(#ribbonShade)">
+      <path d="M684 112H738V356L711 328L684 356Z" fill="url(#ribbon)"/>
+    </g>
+    <g fill="#FBE6DA" fill-opacity="0.55">
+      <circle cx="711" cy="160" r="4.5"/>
+      <circle cx="711" cy="202" r="4.5"/>
+      <circle cx="711" cy="244" r="4.5"/>
+    </g>
+
+    <!-- Q glow -->
+    <g filter="url(#amberGlow)" fill="none" stroke="#F0AE4A" stroke-opacity="0.38" stroke-linecap="round">
+      <path d="M645 653L890 898" stroke-width="116"/>
+      <circle cx="497" cy="505" r="210" stroke-width="116"/>
+    </g>
+
+    <!-- Q -->
+    <g fill="none" stroke="url(#amber)" stroke-linecap="round">
+      <path d="M645 653L890 898" stroke-width="116"/>
+      <circle cx="497" cy="505" r="210" stroke-width="116"/>
+    </g>
+    <circle cx="890" cy="898" r="54" fill="#F7D79A" fill-opacity="0.16"/>
+
+    <!-- bowl: inset shade, rim light, compass motif -->
+    <circle cx="497" cy="505" r="152" fill="url(#bowlShade)"/>
+    <circle cx="497" cy="505" r="150" stroke="#2A1606" stroke-opacity="0.26" stroke-width="12" fill="none"/>
+    <path d="M365 429A152 152 0 0 1 573 373" fill="none" stroke="#FFF4DE" stroke-opacity="0.50" stroke-width="9" stroke-linecap="round"/>
+    <path d="M241 460A260 260 0 0 1 367 280" fill="none" stroke="#FFF4DE" stroke-opacity="0.20" stroke-width="10" stroke-linecap="round"/>
+
+    <g fill="none" stroke="#F2DFBE" stroke-linecap="round">
+      <circle cx="497" cy="505" r="136" stroke-width="2.5" stroke-opacity="0.15" stroke-dasharray="4 12"/>
+      <circle cx="497" cy="505" r="114" stroke-width="2" stroke-opacity="0.20"/>
+      <g stroke-width="3.5" stroke-opacity="0.38">
+        <path d="M486 402V428 M508 402V428 M478 410H516 M478 420H516"/>
+      </g>
+      <path d="M466 470L497 445L528 470" stroke-width="4" stroke-opacity="0.40"/>
+      <path d="M497 493V565" stroke-width="4" stroke-opacity="0.50"/>
+      <circle cx="497" cy="493" r="9" stroke-width="4" stroke-opacity="0.55"/>
+    </g>
+  </g>
+</svg>
