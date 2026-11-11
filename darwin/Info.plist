@@ -4,15 +4,15 @@
         <key>CFBundlePackageType</key>
             <string>APPL</string>
         <key>CFBundleName</key>
-            <string>My Product</string>
+            <string>Quire</string>
         <key>CFBundleExecutable</key>
-            <string>post-planner</string>
+            <string>quire</string>
         <key>CFBundleIdentifier</key>
-            <string>com.mycompany.myproduct</string>
+            <string>com.ben-notes.quire</string>
         <key>CFBundleVersion</key>
             <string>0.0.1</string>
         <key>CFBundleGetInfoString</key>
-            <string>Some Product Comments</string>
+            <string>Quire</string>
         <key>CFBundleShortVersionString</key>
             <string>0.0.1</string>
         <key>CFBundleIconFile</key>
@@ -22,6 +22,6 @@
         <key>NSHighResolutionCapable</key>
             <string>true</string>
         <key>NSHumanReadableCopyright</key>
-            <string>(c) 2025, My Company</string>
+            <string>© 2026, BenNotes</string>
     </dict>
 </plist>

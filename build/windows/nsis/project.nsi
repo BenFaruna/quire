@@ -19,11 +19,11 @@ Unicode true
 ####
 ## The following information is taken from the wails_tools.nsh file, but they can be overwritten here.
 ####
-## !define INFO_PROJECTNAME    "my-project" # Default "post-planner"
-## !define INFO_COMPANYNAME    "My Company" # Default "BenNotes"
-## !define INFO_PRODUCTNAME    "My Product Name" # Default "My Product"
+## !define INFO_PROJECTNAME    "my-project" # Default "quire"
+## !define INFO_COMPANYNAME    "BenNotes" # Default "BenNotes"
+## !define INFO_PRODUCTNAME    "Quire Name" # Default "Quire"
 ## !define INFO_PRODUCTVERSION "1.0.0"     # Default "0.1.0"
-## !define INFO_COPYRIGHT      "(c) Now, My Company" # Default "© 2026, BenNotes"
+## !define INFO_COPYRIGHT      "(c) Now, BenNotes" # Default "© 2026, BenNotes"
 ###
 ## !define PRODUCT_EXECUTABLE  "Application.exe"      # Default "${INFO_PROJECTNAME}.exe"
 ## !define UNINST_KEY_NAME     "UninstKeyInRegistry"  # Default "${INFO_COMPANYNAME}${INFO_PRODUCTNAME}"

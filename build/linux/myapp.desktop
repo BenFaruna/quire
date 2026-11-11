@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-Name=post-planner
-Exec=post-planner
-Icon=post-planner
+Name=quire
+Exec=quire
+Icon=quire
 Categories=Development;
 Terminal=false
 Keywords=wails

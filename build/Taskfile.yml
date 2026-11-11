@@ -280,7 +280,7 @@ tasks:
       Defaults to a pure-Go static binary on a distroless/static base. The
       production frontend is built first so the embedded assets are current.
 
-      Usage: task build:docker [TAG=post-planner:latest] [CGO_ENABLED=1] [GO_IMAGE=...] [RUNTIME_IMAGE=...]
+      Usage: task build:docker [TAG=quire:latest] [CGO_ENABLED=1] [GO_IMAGE=...] [RUNTIME_IMAGE=...]
       For CGO apps, set CGO_ENABLED=1 with libc-compatible builder/runtime images, e.g.:
         task build:docker CGO_ENABLED=1 GO_IMAGE=golang:bookworm RUNTIME_IMAGE=gcr.io/distroless/base-debian12
     deps:
@@ -311,7 +311,7 @@ tasks:
     summary: Builds and runs the Docker image
     desc: |
       Builds the Docker image and runs it, exposing port 8080.
-      Usage: task run:docker [TAG=post-planner:latest] [PORT=8080]
+      Usage: task run:docker [TAG=quire:latest] [PORT=8080]
       Note: The internal container port is always 8080. The PORT variable
       only changes the host port mapping. Ensure your app uses port 8080
       or modify the Dockerfile to match your ServerOptions.Port setting.

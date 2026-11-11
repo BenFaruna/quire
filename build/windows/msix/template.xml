@@ -8,27 +8,27 @@
         AllowPromptForPassword="false">
     </Settings>
     <Installer
-        Path="post-planner"
+        Path="quire"
         Arguments=""
-        InstallLocation="C:\Program Files\BenNotes\My Product">
+        InstallLocation="C:\Program Files\BenNotes\Quire">
     </Installer>
     <PackageInformation
-        PackageName="My Product"
-        PackageDisplayName="My Product"
+        PackageName="Quire"
+        PackageDisplayName="Quire"
         PublisherName="CN=BenNotes"
         PublisherDisplayName="BenNotes"
         Version="0.1.0.0"
-        PackageDescription="A post-planner application">
+        PackageDescription="A local-first Markdown notebook">
         <Capabilities>
             <Capability Name="runFullTrust" />
             
         </Capabilities>
         <Applications>
             <Application
-                Id="com.ben-notes.post-planner"
-                Description="A post-planner application"
-                DisplayName="My Product"
-                ExecutableName="post-planner"
+                Id="com.ben-notes.quire"
+                Description="A local-first Markdown notebook"
+                DisplayName="Quire"
+                ExecutableName="quire"
                 EntryPoint="Windows.FullTrustApplication">
                 
             </Application>
@@ -41,13 +41,13 @@
         </Dependencies>
         <Properties>
             <Framework>false</Framework>
-            <DisplayName>My Product</DisplayName>
+            <DisplayName>Quire</DisplayName>
             <PublisherDisplayName>BenNotes</PublisherDisplayName>
-            <Description>A post-planner application</Description>
+            <Description>A local-first Markdown notebook</Description>
             <Logo>Assets\AppIcon.png</Logo>
         </Properties>
     </PackageInformation>
-    <SaveLocation PackagePath="post-planner.msix" />
+    <SaveLocation PackagePath="quire.msix" />
     <PackageIntegrity>
         <CertificatePath></CertificatePath>
     </PackageIntegrity>

@@ -1,13 +1,13 @@
 [Desktop Entry]
 Version=1.0
-Name=My Product
-Comment=A program that does X
+Name=Quire
+Comment=A local-first Markdown notebook
 # The Exec line includes %u to pass the URL to the application
-Exec=/usr/local/bin/post-planner %u
+Exec=/usr/local/bin/quire %u
 Terminal=false
 Type=Application
-Icon=post-planner
+Icon=quire
 Categories=Utility;
-StartupWMClass=post-planner
+StartupWMClass=quire
 
  

@@ -6,10 +6,10 @@
 		"0409": {
 			"ProductVersion": "0.1.0",
 			"CompanyName": "BenNotes",
-			"FileDescription": "A post-planner application",
+			"FileDescription": "A local-first Markdown notebook",
 			"LegalCopyright": "© 2026, BenNotes",
-			"ProductName": "My Product",
-			"Comments": "This is a comment"
+			"ProductName": "Quire",
+			"Comments": "Quire, a local-first Markdown notebook"
 		}
 	}
 }
