@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="540" height="380" viewBox="0 0 540 380">
+  <title>Quire DMG background</title>
+
+  <!--
+    Sized exactly to the DMG window (540x380, build/darwin/Taskfile.yml).
+    `wails3 tool package` with format dmg places the app icon at 28% of the width
+    and the Applications link at 72%, both centred at height/2 - 26, with 96px
+    icons and 12px labels. At 540x380 that is Quire at (151,164) and
+    Applications at (388,164), so this art keeps the columns x 103..199 and
+    x 340..436, y 112..245 clear and puts everything else in the empty bands.
+    Change the window size in the Taskfile and these bands must move with it.
+    Render: magick -background '#efe7d6' dmg-background.svg -flatten -resize 540x380 PNG24:dmg-background.png
+  -->
+
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="380" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fbf7ee"/>
+      <stop offset="1" stop-color="#efe7d6"/>
+    </linearGradient>
+
+    <radialGradient id="warm" cx="270" cy="160" r="340" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e8b563" stop-opacity="0.16"/>
+      <stop offset="0.6" stop-color="#e8b563" stop-opacity="0.05"/>
+      <stop offset="1" stop-color="#e8b563" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="hint" x1="215" y1="140" x2="320" y2="190" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f6d49a"/>
+      <stop offset="0.5" stop-color="#e8b563"/>
+      <stop offset="1" stop-color="#d5953a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- paper -->
+  <rect width="540" height="380" fill="url(#paper)"/>
+
+  <!-- graph paper -->
+  <g stroke="#0e1116" stroke-opacity="0.045" stroke-width="1">
+    <path d="M30 0V380 M60 0V380 M90 0V380 M120 0V380 M150 0V380 M180 0V380 M210 0V380 M240 0V380 M270 0V380 M300 0V380 M330 0V380 M360 0V380 M390 0V380 M420 0V380 M450 0V380 M480 0V380 M510 0V380"/>
+    <path d="M0 30H540 M0 60H540 M0 90H540 M0 120H540 M0 150H540 M0 180H540 M0 210H540 M0 240H540 M0 270H540 M0 300H540 M0 330H540 M0 360H540"/>
+  </g>
+
+  <rect width="540" height="380" fill="url(#warm)"/>
+
+  <!-- drag hint, sitting in the gap between the two icon slots -->
+  <g fill="none" stroke="url(#hint)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M230 150L244 164L230 178"/>
+    <path d="M262 150L276 164L262 178"/>
+    <path d="M294 150L308 164L294 178"/>
+  </g>
+
+  <!-- footer -->
+  <text x="270" y="292" text-anchor="middle" font-family="Liberation Sans, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="11.5" letter-spacing="2.4" fill="#0e1116" fill-opacity="0.45">DRAG QUIRE TO APPLICATIONS</text>
+  <path d="M222 318H318" stroke="#d5953a" stroke-opacity="0.45" stroke-width="2" stroke-linecap="round"/>
+  <text x="270" y="344" text-anchor="middle" font-family="Liberation Sans, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13" letter-spacing="5" fill="#0e1116" fill-opacity="0.26">quire</text>
+</svg>
