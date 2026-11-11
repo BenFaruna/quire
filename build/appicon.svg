@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Quire</title>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b222c"/>
+      <stop offset="1" stop-color="#0e1116"/>
+    </linearGradient>
+    <!-- One gradient in user space, so the tail blends into the ring at any size. -->
+    <linearGradient id="amber" gradientUnits="userSpaceOnUse" x1="227" y1="227" x2="802" y2="802">
+      <stop offset="0" stop-color="#f6d49a"/>
+      <stop offset="0.45" stop-color="#e8b563"/>
+      <stop offset="1" stop-color="#d1933c"/>
+    </linearGradient>
+    <filter id="lift" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#000000" flood-opacity="0.36"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" rx="224" fill="url(#tile)"/>
+
+  <g transform="translate(-6 -6)" filter="url(#lift)">
+    <circle cx="477" cy="477" r="202" fill="none" stroke="url(#amber)" stroke-width="96"/>
+    <path d="M620 620 L760 760" fill="none" stroke="url(#amber)" stroke-width="96" stroke-linecap="round"/>
+  </g>
+</svg>
