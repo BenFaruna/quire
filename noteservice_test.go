@@ -134,7 +134,7 @@ func TestFirstRunSeedsWelcomeNote(t *testing.T) {
 	if len(notes) != 1 {
 		t.Fatalf("expected 1 seeded note, got %d", len(notes))
 	}
-	if notes[0].Title != "Welcome to Notes" {
+	if notes[0].Title != "Welcome to Quire" {
 		t.Fatalf("seeded title = %q", notes[0].Title)
 	}
 }

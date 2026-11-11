@@ -23,7 +23,7 @@ import (
 // gets the real scheduling rules, draft generation and publish tracking
 // instead of reimplementing them against the sidecar files.
 //
-// It runs as `post-planner mcp` over stdin/stdout. The GUI branch in main() is
+// It runs as `quire mcp` over stdin/stdout. The GUI branch in main() is
 // unaffected, which keeps the app and the server on one binary and one storage
 // path.
 
@@ -91,7 +91,9 @@ func runMCP() error {
 // also appended to a log file: a connection that fails still leaves a trace.
 const (
 	// mcpLogEnv moves the log file (or disables it with "off").
-	mcpLogEnv = "POST_PLANNER_MCP_LOG"
+	mcpLogEnv = "QUIRE_MCP_LOG"
+	// mcpLogEnvLegacy is the variable name used before the app was renamed.
+	mcpLogEnvLegacy = "POST_PLANNER_MCP_LOG"
 	// mcpLogMaxBytes caps the file; it is rotated to a single .1 backup.
 	mcpLogMaxBytes = 1 << 20
 )
@@ -123,22 +125,35 @@ func newMCPLogger() (*slog.Logger, string, io.Closer) {
 	return logger, logPath, logFile
 }
 
-// mcpLogPath honours POST_PLANNER_MCP_LOG, then falls back to the app config
+// mcpLogPath honours QUIRE_MCP_LOG, then falls back to the app config
 // directory next to the notes.
 func mcpLogPath() string {
-	if value, ok := os.LookupEnv(mcpLogEnv); ok {
-		switch strings.ToLower(strings.TrimSpace(value)) {
-		case "", "off", "none", "stderr":
-			return ""
-		default:
-			return value
-		}
+	if path, set := mcpLogFromEnv(mcpLogEnv); set {
+		return path
 	}
-	configDir, err := os.UserConfigDir()
+	if path, set := mcpLogFromEnv(mcpLogEnvLegacy); set {
+		return path
+	}
+	appDir, err := appConfigDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(configDir, "post-planner", "mcp.log")
+	return filepath.Join(appDir, "mcp.log")
+}
+
+// mcpLogFromEnv interprets a log-path variable: unset means "not configured",
+// while an empty value, "off", "none" or "stderr" disable the file.
+func mcpLogFromEnv(name string) (string, bool) {
+	value, ok := os.LookupEnv(name)
+	if !ok {
+		return "", false
+	}
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "off", "none", "stderr":
+		return "", true
+	default:
+		return value, true
+	}
 }
 
 func openMCPLogFile(path string) (*os.File, error) {
@@ -208,7 +223,7 @@ func newMCPServer(notes *NotesService, planner *PlannerService, publish *Publish
 		logger = slog.New(slog.DiscardHandler)
 	}
 	server := mcp.NewServer(
-		&mcp.Implementation{Name: "post-planner", Version: mcpVersion},
+		&mcp.Implementation{Name: appSlug, Version: mcpVersion},
 		&mcp.ServerOptions{Instructions: mcpServerInstructions, Logger: logger},
 	)
 	// The SDK logs session connect/end events through this logger, so a client

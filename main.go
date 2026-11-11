@@ -15,7 +15,7 @@ import (
 var assets embed.FS
 
 func main() {
-	// `post-planner mcp` runs the agent-facing MCP server over stdin/stdout.
+	// `quire mcp` runs the agent-facing MCP server over stdin/stdout.
 	// It shares the storage and business rules with the GUI but never starts
 	// the webview, so it works while the app is closed.
 	if len(os.Args) > 1 && os.Args[1] == "mcp" {
@@ -34,8 +34,8 @@ func main() {
 	notes.writes = tracker
 	notifier := notifications.New()
 	app := application.New(application.Options{
-		Name:        "Notes",
-		Description: "A Markdown notes app built with Wails",
+		Name:        appName,
+		Description: "A local-first Markdown notebook built with Wails",
 		Services: []application.Service{
 			application.NewService(notes),
 			application.NewService(publish),
@@ -63,7 +63,7 @@ func main() {
 	}()
 
 	app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:     "Notes",
+		Title:     appName,
 		Width:     1280,
 		Height:    820,
 		MinWidth:  380,

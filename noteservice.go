@@ -58,11 +58,11 @@ func (s *NotesService) init() error {
 	if s.root != "" {
 		return nil
 	}
-	configDir, err := os.UserConfigDir()
+	appDir, err := appConfigDir()
 	if err != nil {
 		return fmt.Errorf("locate config directory: %w", err)
 	}
-	root := filepath.Join(configDir, "post-planner", "notes")
+	root := filepath.Join(appDir, "notes")
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return fmt.Errorf("create notes directory: %w", err)
 	}
@@ -82,7 +82,7 @@ func (s *NotesService) init() error {
 		}
 	}
 	// Empty notes directory: add a welcome document that exercises the renderer.
-	_, err = s.createWith("Welcome to Notes", welcomeNote)
+	_, err = s.createWith("Welcome to Quire", welcomeNote)
 	return err
 }
 
