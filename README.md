@@ -318,6 +318,78 @@ npm run build     # rebuild embedded frontend assets
 After changing an exported Go service or model, regenerate the typed bindings
 with `wails3 generate bindings -ts` from the repository root.
 
+## Icons and packaging art
+
+The icon and DMG artwork is committed as build output, so a change starts at one
+of the SVGs in `build/` and ends in the binary files beside it.
+
+| Source | Render | Consumed by |
+| --- | --- | --- |
+| `build/appicon.svg` | `build/appicon.png` | `build/darwin/icons.icns` (the app icon, and the mounted DMG volume), `build/windows/icon.ico`, the Linux packages, the Android launcher mipmaps |
+| `build/darwin/dmg-file-icon.svg` | `build/darwin/dmg-file-icon.png` | `build/darwin/dmg-file-icon.icns` — the icon of the `.dmg` file itself in Finder |
+| `build/darwin/dmg-background.svg` | `build/darwin/dmg-background.png` | the DMG window background (540×380) |
+| `build/appicon.icon/` | `build/darwin/Assets.car` | the macOS 26 icon bundle (see below) |
+
+The two DMG slots are wired in `build/darwin/Taskfile.yml`: `--volume-icon` is
+`build/darwin/icons.icns`, which is what the mounted drive shows, and
+`--file-icon` is `build/darwin/dmg-file-icon.icns`, which is what the downloaded
+disk image shows. Both are defaults and can be overridden per run.
+
+### Rendering the PNGs
+
+`appicon.svg` and `dmg-file-icon.svg` share the same Q geometry; the DMG icon
+adds the graph grid, the glow and the volume ribbon. Render them with
+ImageMagick's librsvg backend:
+
+```bash
+magick -background none build/appicon.svg -resize 1024x1024 -depth 8 -strip build/appicon.png
+magick -background none build/darwin/dmg-file-icon.svg -resize 1254x1254 -depth 8 -strip PNG32:build/darwin/dmg-file-icon.png
+magick -background '#efe7d6' build/darwin/dmg-background.svg -flatten -resize 540x380 -depth 8 -strip PNG24:build/darwin/dmg-background.png
+```
+
+Then let Wails build the container formats. Run it from `build/`, because the
+tool resolves its relative filenames against the working directory, and park the
+Windows `.ico` of the DMG icon somewhere throwaway so it cannot overwrite the
+app's:
+
+```bash
+cd build
+wails3 generate icons -input appicon.png -macfilename darwin/icons.icns -windowsfilename windows/icon.ico
+wails3 generate icons -input darwin/dmg-file-icon.png -macfilename darwin/dmg-file-icon.icns -windowsfilename /tmp/discard.ico
+```
+
+Android round icons come from the same `appicon.png` through a circle mask, and
+its launcher mipmaps are committed alongside it. Keep `--` out of the SVG header
+comments: a double hyphen is illegal inside an XML comment, and librsvg then
+refuses the whole document.
+
+### The macOS `actool` step
+
+`build/darwin/Assets.car` is the macOS 26 icon bundle — layered art with dark,
+tinted and clear variants plus the specular highlight — and it is compiled from
+the Icon Composer document in `build/appicon.icon/` by Apple's `actool`. Only
+Xcode ships `actool`, so this is the one icon artefact that cannot be built on
+Linux or Windows.
+
+`task darwin:package` reaches it through `common:generate:icons` in
+`build/Taskfile.yml`, which passes `-iconcomposerinput appicon.icon
+-macassetdir darwin`. Anywhere else `wails3 generate icons` skips that half and
+refreshes only the `.icns` and `.ico`.
+
+When `Assets.car` sits next to `icons.icns` in `Contents/Resources`, macOS 26
+prefers it. The bundle sets no `CFBundleIconName`, and the system falls back to
+`appicon` when the file is present (see the commented option in
+`build/config.yml`). The two therefore have to be regenerated together: a
+committed `Assets.car` that predates an icon change wins over the newer `.icns`,
+which puts the old artwork back in the Dock. That is true of the copy in this
+repository, which predates the Quire mark.
+
+Deleting it is safe. Both copy steps in `build/darwin/Taskfile.yml` are guarded
+with `if [ -f … ]`, so a bundle without `Assets.car` simply falls back to
+`icons.icns`. Rebuild it on a Mac with `task darwin:package` after
+`task common:generate:icons`, or delete it before packaging. The DMG itself is
+macOS-only too: `wails3 tool package --format dmg` needs `hdiutil`.
+
 ## Layout
 
 ```
