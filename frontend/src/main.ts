@@ -20,7 +20,7 @@ import { initHome, openCategoryDialog, renderHomeScreen, type HomeHost } from ".
 const app = document.getElementById("app") as HTMLDivElement;
 const noteList = document.getElementById("note-list") as HTMLUListElement;
 const listEmpty = document.getElementById("list-empty") as HTMLParagraphElement;
-const notesCount = document.getElementById("notes-count") as HTMLSpanElement;
+const themeToggle = document.getElementById("theme-toggle") as HTMLButtonElement;
 const searchInput = document.getElementById("search") as HTMLInputElement;
 const searchClear = document.getElementById("search-clear") as HTMLButtonElement;
 const newButton = document.getElementById("new-note") as HTMLButtonElement;
@@ -139,6 +139,28 @@ const storage = {
         }
     },
 };
+
+// ---------------------------------------------------------------------------
+// Theme
+// ---------------------------------------------------------------------------
+
+const THEME_KEY = "quire.theme";
+
+type Theme = "dark" | "light";
+
+function currentTheme(): Theme {
+    return document.documentElement.dataset.theme === "light" ? "light" : "dark";
+}
+
+function applyTheme(theme: Theme) {
+    document.documentElement.dataset.theme = theme;
+    const label = theme === "light" ? "Switch to dark theme" : "Switch to light theme";
+    themeToggle.title = label;
+    themeToggle.setAttribute("aria-label", label);
+    themeToggle.setAttribute("aria-pressed", String(theme === "light"));
+}
+
+applyTheme(storage.get(THEME_KEY) === "light" ? "light" : "dark");
 
 function loadCollapsedStatuses(): string[] {
     try {
@@ -492,7 +514,6 @@ function renderList() {
                   : "No notes match your search.";
     }
     searchClear.hidden = searchInput.value.length === 0;
-    notesCount.textContent = `${notes.length} ${notes.length === 1 ? "note" : "notes"}`;
 }
 
 function updateActiveListItem() {
@@ -1200,31 +1221,47 @@ async function renderPreview() {
 }
 
 type MermaidApi = typeof import("mermaid").default;
+type MermaidConfig = Parameters<MermaidApi["initialize"]>[0];
 
 let mermaidPromise: Promise<MermaidApi> | null = null;
 let mermaidSeq = 0;
 
+// Mermaid bakes its palette into the SVG it emits, so the colours have to come
+// from whichever theme is on when the diagram is drawn.
+function mermaidConfig(): MermaidConfig {
+    const light = currentTheme() === "light";
+    const palette = light
+        ? {
+              primaryColor: "#fffdf8",
+              primaryTextColor: "#202632",
+              primaryBorderColor: "#c7bcaa",
+              lineColor: "#5a6472",
+              secondaryColor: "#f1ebdf",
+              tertiaryColor: "#f6f1e7",
+          }
+        : {
+              primaryColor: "#1a222d",
+              primaryTextColor: "#dbe3ee",
+              primaryBorderColor: "#2c3642",
+              lineColor: "#8b97a8",
+              secondaryColor: "#202a36",
+              tertiaryColor: "#141a22",
+          };
+    return {
+        startOnLoad: false,
+        securityLevel: "strict",
+        suppressErrorRendering: true,
+        theme: light ? "default" : "dark",
+        darkMode: !light,
+        fontFamily: "inherit",
+        themeVariables: { background: "transparent", fontSize: "14px", ...palette },
+    };
+}
+
 function loadMermaid(): Promise<MermaidApi> {
     if (!mermaidPromise) {
         mermaidPromise = import("mermaid").then(({ default: mermaid }) => {
-            mermaid.initialize({
-                startOnLoad: false,
-                securityLevel: "strict",
-                suppressErrorRendering: true,
-                theme: "dark",
-                darkMode: true,
-                fontFamily: "inherit",
-                themeVariables: {
-                    background: "transparent",
-                    primaryColor: "#1a222d",
-                    primaryTextColor: "#dbe3ee",
-                    primaryBorderColor: "#2c3642",
-                    lineColor: "#8b97a8",
-                    secondaryColor: "#202a36",
-                    tertiaryColor: "#141a22",
-                    fontSize: "14px",
-                },
-            });
+            mermaid.initialize(mermaidConfig());
             return mermaid;
         });
     }
@@ -1593,6 +1630,14 @@ deleteButton.addEventListener("click", () => void deleteNote());
 publishButton.addEventListener("click", () => void publishNote());
 scheduleButton.addEventListener("click", scheduleNote);
 newCategoryButton.addEventListener("click", () => openCategoryDialog());
+themeToggle.addEventListener("click", () => {
+    const next: Theme = currentTheme() === "dark" ? "light" : "dark";
+    applyTheme(next);
+    storage.set(THEME_KEY, next);
+    // Diagrams carry the old palette inside their SVG, so redraw them.
+    mermaidPromise = null;
+    void renderPreview();
+});
 screenToggle.addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-screen]");
     if (button) setScreen(button.dataset.screen as Screen);
