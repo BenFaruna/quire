@@ -402,12 +402,12 @@ per-folder, exactly like the notes.
 ## 6. Credentials
 
 Secrets are stored per platform under the service name
-`post-planner-publishing`.
+`quire-publishing`.
 
 ```text
 get(platform):
   keychain hit ──► decode ──► return (keychain)
-  otherwise ────► read <config>/post-planner/publishing/<platform>.json
+  otherwise ────► read <config>/quire/publishing/<platform>.json
 save(platform, creds):
   keychain set ──► remove fallback file ──► return (keychain)
   on failure ───► write fallback file 0600 ──► return (file)

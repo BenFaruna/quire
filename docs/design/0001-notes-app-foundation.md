@@ -173,10 +173,10 @@ interprets them.
 The notes directory is resolved lazily on first use:
 
 ```text
-os.UserConfigDir()/post-planner/notes
+os.UserConfigDir()/quire/notes
 ```
 
-On Linux that is `~/.config/post-planner/notes`. The directory is created with
+On Linux that is `~/.config/quire/notes`. The directory is created with
 `0755` if missing. `NotesPath` exposes it to the UI so the folder button can
 copy the location to the clipboard.
 
@@ -184,7 +184,7 @@ copy the location to the clipboard.
 
 1. Resolve and create the root if `s.root` is empty.
 2. Scan the directory for any `.md` file (case-insensitive extension).
-3. If none exists, seed `Welcome to Notes` from the `welcomeNote` constant.
+3. If none exists, seed `Welcome to Quire` from the `welcomeNote` constant.
 
 The welcome note is not decoration. It exercises the renderer end to end —
 headings, emphasis, strikethrough, inline code, links, blockquotes, nested

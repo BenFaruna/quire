@@ -1,4 +1,4 @@
-# Post Planner Implementation Plan
+# Quire Implementation Plan
 
 **Goal:** Turn the note-and-publish app into a post planner: every note can be scheduled to one or more platforms, the sidebar groups notes by derived status, and the user can inspect the history of posts that were marked done or skipped.
 
@@ -969,13 +969,13 @@ Expected: all PASS, existing publish/note tests unchanged.
 
 **Files:**
 - Modify: `main.go` (construct publish + planner, register both)
-- Regenerate: `frontend/bindings/post-planner/plannerservice.ts`, `models.ts`, `index.ts`
+- Regenerate: `frontend/bindings/quire/plannerservice.ts`, `models.ts`, `index.ts`
 
 - [ ] **Step 1:** Construct `publish := NewPublishService(notes)` and `planner := NewPlannerService(notes, publish)`; register both alongside `notes`.
 - [ ] **Step 2:** `wails3 generate bindings -ts -clean` — expect `plannerservice.ts` and model exports for `PlanState`, `PlanSlot`, `Rendition`, `QueueItem`, `BacklogItem`, `SlotText`, and `CompletedAt`/`Body`.
 - [ ] **Step 3:** Confirm generated slice types are nullable and add `?? []` at every new call site.
 - [ ] **Step 4:** `cd frontend && npx tsc --noEmit && npm run build` — expect no errors. The Phase 0 baseline fix must already be in place.
-- [ ] **Step 5:** `wails3 build` and confirm `bin/post-planner` rebuilds.
+- [ ] **Step 5:** `wails3 build` and confirm `bin/quire` rebuilds.
 - [ ] **Step 6: Commit.**
 
 ### Phase 4 — Queue screen and grouped sidebar

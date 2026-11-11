@@ -3,7 +3,7 @@
 **Goal:** Let an MCP-capable agent read and write the same notes, planner state,
 drafts, and publish records the desktop app uses, without copy/paste and without
 reimplementing scheduling or publishing rules. The server runs from the same
-binary as `post-planner mcp` over stdio and works whether or not the GUI is
+binary as `quire mcp` over stdio and works whether or not the GUI is
 open.
 
 **Architecture:** `main.go` branches on the first argument before constructing
@@ -25,14 +25,14 @@ alongside the watcher and lock work. Publishing semantics remain owned by
 
 ## Global Constraints
 
-- **One binary, two modes.** `post-planner` starts the GUI; `post-planner mcp`
+- **One binary, two modes.** `quire` starts the GUI; `quire mcp`
   starts the server. There is no separate executable to find, package, or keep
   in sync.
 - **stdio is the transport.** stdout is reserved for protocol frames; all
   diagnostics go to stderr. A stray print to stdout corrupts the session.
 - **Diagnostics survive a silent client.** The same lines are appended to
-  `<config dir>/post-planner/mcp.log` (rotated at 1 MiB), because clients
-  commonly discard their child's stderr. `POST_PLANNER_MCP_LOG` moves the file,
+  `<config dir>/quire/mcp.log` (rotated at 1 MiB), because clients
+  commonly discard their child's stderr. `QUIRE_MCP_LOG` moves the file,
   or `off` disables it. The SDK's `ServerOptions.Logger` and a receiving
   middleware write through this logger, so the handshake and every traceable
   method appear in one place.
@@ -127,11 +127,11 @@ After this work:
 ## 2. Process model
 
 ```text
-post-planner                 → Wails GUI, watcher, reminders
-post-planner mcp             → stdio MCP server
+quire                 → Wails GUI, watcher, reminders
+quire mcp             → stdio MCP server
 
 runMCP():
-  logger  := newMCPLogger()          // stderr + <config>/post-planner/mcp.log
+  logger  := newMCPLogger()          // stderr + <config>/quire/mcp.log
   notes   := NewNotesService()
   publish := NewPublishService(notes)
   planner := NewPlannerService(notes, publish)
@@ -283,7 +283,7 @@ Most clients use the `mcpServers` shape:
 {
   "mcpServers": {
     "notes": {
-      "command": "/absolute/path/to/bin/post-planner",
+      "command": "/absolute/path/to/bin/quire",
       "args": ["mcp"]
     }
   }
@@ -297,7 +297,7 @@ opencode uses:
   "mcp": {
     "notes": {
       "type": "local",
-      "command": ["/absolute/path/to/bin/post-planner", "mcp"],
+      "command": ["/absolute/path/to/bin/quire", "mcp"],
       "enabled": true
     }
   }
@@ -305,7 +305,7 @@ opencode uses:
 ```
 
 On macOS, point at the binary inside the bundle
-(`/Applications/Notes.app/Contents/MacOS/post-planner`). The server uses the
+(`/Applications/Notes.app/Contents/MacOS/quire`). The server uses the
 normal user config directory, so it sees the same notes as the GUI.
 
 ## 7. Failure handling
@@ -343,7 +343,7 @@ process.
 
 Manual stdio probe (used during implementation):
 
-1. Launch `bin/post-planner mcp` and send `initialize`.
+1. Launch `bin/quire mcp` and send `initialize`.
 2. List tools (21), resources, resource templates, and prompts.
 3. Call `create_note`, `search_notes`, `resources/read`, and `schedule_note`.
 4. Confirm the note and `.plan.json` appear in the notes directory and that

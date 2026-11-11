@@ -1,6 +1,7 @@
-# Notes
+# Quire
 
-A Markdown notes app built with [Wails v3](https://v3.wails.io/), Go, and TypeScript.
+A local-first Markdown notebook built with [Wails v3](https://v3.wails.io/), Go,
+and TypeScript.
 
 Notes are stored as ordinary `.md` files — one file per note, with the title as the
 document's leading `# Heading` — so they remain portable and readable outside the app.
@@ -123,7 +124,7 @@ is applied.
 **Credentials.** Keys are validated by the provider, then stored in the OS
 keychain (`zalando/go-keyring`). If the desktop has no secret service available
 (for example a minimal Linux session), the app falls back to a `0600` file under
-`os.UserConfigDir()/post-planner/publishing` and says so in the dialog. The frontend
+`os.UserConfigDir()/quire/publishing` and says so in the dialog. The frontend
 never receives the key; all HTTP happens in Go.
 
 **Connecting.**
@@ -189,7 +190,7 @@ or publish posts without copy/paste. It speaks stdio and works with any MCP
 client; the desktop app does not need to be running.
 
 ```bash
-bin/post-planner mcp
+bin/quire mcp
 ```
 
 The server reads and writes the same Markdown files and `.plan.json` /
@@ -247,7 +248,7 @@ Most clients use the `mcpServers` shape:
 {
   "mcpServers": {
     "notes": {
-      "command": "/absolute/path/to/bin/post-planner",
+      "command": "/absolute/path/to/bin/quire",
       "args": ["mcp"]
     }
   }
@@ -261,7 +262,7 @@ opencode uses:
   "mcp": {
     "notes": {
       "type": "local",
-      "command": ["/absolute/path/to/bin/post-planner", "mcp"],
+      "command": ["/absolute/path/to/bin/quire", "mcp"],
       "enabled": true
     }
   }
@@ -269,13 +270,13 @@ opencode uses:
 ```
 
 On macOS, point `command` at the binary inside the bundle, for example
-`/Applications/Notes.app/Contents/MacOS/post-planner`.
+`/Applications/Quire.app/Contents/MacOS/quire`.
 
 ### Logging
 
 Diagnostics go to stderr and are also appended to
-`<config dir>/post-planner/mcp.log` (`~/.config/post-planner/mcp.log` on Linux,
-`~/Library/Application Support/post-planner/mcp.log` on macOS). The file exists
+`<config dir>/quire/mcp.log` (`~/.config/quire/mcp.log` on Linux,
+`~/Library/Application Support/quire/mcp.log` on macOS). The file exists
 because many clients hide their child process's stderr. It rotates to
 `mcp.log.1` at 1 MiB.
 
@@ -291,7 +292,7 @@ absolute path to the executable itself. If the log shows `server starting` but
 no `initialize`, the process started and the failure is in the handshake; the
 logged error says why.
 
-Set `POST_PLANNER_MCP_LOG` to move the file, or to `off` to keep diagnostics on
+Set `QUIRE_MCP_LOG` to move the file, or to `off` to keep diagnostics on
 stderr only.
 
 ### Watching for changes
@@ -306,7 +307,7 @@ reloads it when the editor is clean; if there are unsaved edits it shows a
 
 ```bash
 wails3 dev        # run with hot reload
-wails3 build      # production build → bin/post-planner
+wails3 build      # production build → bin/quire
 go test .         # backend tests
 
 cd frontend
@@ -352,7 +353,7 @@ frontend/
 
 ## Where notes live
 
-`os.UserConfigDir()/post-planner/notes` — on Linux that is `~/.config/post-planner/notes`.
+`os.UserConfigDir()/quire/notes` — on Linux that is `~/.config/quire/notes`.
 Click the folder icon in the sidebar to copy the path to the clipboard. Category
 definitions and assignments are in `.categories.json` there; notes themselves
 stay ordinary `.md` files.
