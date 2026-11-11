@@ -4,10 +4,14 @@
   <!--
     Quire app icon.
 
-    The Q letterform here is the same one as build/darwin/dmg-file-icon.svg:
-    ring centre at 48.1%/49.1% of the tile, path radius 26.25% of the tile,
-    stroke 14.5%, a steep 62 degree tail tapered 100 > 72 and a plain counter.
-    Change one file, change the other, or the two marks stop matching.
+    The mark is the same one as build/darwin/dmg-file-icon.svg:
+      Q ring    centre at 48.1%/49.1% of the tile, path radius 26.25% of the
+                tile, stroke 14.5%, a steep 62 degree tail tapered 100 > 72
+      ribbon    1.28x the DMG ribbon (its 800px tile scaled to this 1024 tile):
+                x 732 to 801, y 0 to 312, notch apex 767,277, three dots
+    The ribbon is drawn before the Q so the ring covers its lower end, and it is
+    clipped by the tile corner, exactly as in the DMG icon. Change one file,
+    change the other, or the two marks stop matching.
   -->
 
   <defs>
@@ -24,6 +28,12 @@
       <stop offset="1" stop-color="#d5953a"/>
     </linearGradient>
 
+    <linearGradient id="ribbon" x1="732" y1="0" x2="801" y2="312" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f97a57"/>
+      <stop offset="0.6" stop-color="#e0503a"/>
+      <stop offset="1" stop-color="#be3323"/>
+    </linearGradient>
+
     <!-- recessed counter: a soft shadow on the upper left and nothing else -->
     <radialGradient id="counter" cx="426" cy="424" r="286" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#04070a" stop-opacity="0.58"/>
@@ -31,12 +41,32 @@
       <stop offset="1" stop-color="#04070a" stop-opacity="0.10"/>
     </radialGradient>
 
+    <clipPath id="iconTile">
+      <rect width="1024" height="1024" rx="224"/>
+    </clipPath>
+
     <filter id="lift" x="-25%" y="-25%" width="150%" height="150%">
       <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#000000" flood-opacity="0.36"/>
+    </filter>
+
+    <filter id="ribbonShade" x="-60%" y="-30%" width="220%" height="180%">
+      <feDropShadow dx="-9" dy="11" stdDeviation="11" flood-color="#000000" flood-opacity="0.5"/>
     </filter>
   </defs>
 
   <rect width="1024" height="1024" rx="224" fill="url(#tile)"/>
+
+  <!-- bookmark ribbon, behind the Q and clipped by the tile corner -->
+  <g clip-path="url(#iconTile)">
+    <g filter="url(#ribbonShade)">
+      <path d="M732 0H801V312L767 277L732 312Z" fill="url(#ribbon)"/>
+    </g>
+    <g fill="#fbe6da" fill-opacity="0.55">
+      <circle cx="767" cy="61" r="5.8"/>
+      <circle cx="767" cy="115" r="5.8"/>
+      <circle cx="767" cy="169" r="5.8"/>
+    </g>
+  </g>
 
   <g filter="url(#lift)">
     <!-- steep tapered tail first, so the ring covers the joint -->
