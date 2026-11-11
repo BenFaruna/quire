@@ -1,16 +1,36 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <title>Quire</title>
+
+  <!--
+    Quire app icon.
+
+    The Q letterform here is the same one as build/darwin/dmg-file-icon.svg:
+    ring centre at 48.1%/49.1% of the tile, path radius 26.25% of the tile,
+    stroke 14.5%, a steep 62 degree tail tapered 100 > 72 and a plain counter.
+    Change one file, change the other, or the two marks stop matching.
+  -->
+
   <defs>
     <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#1b222c"/>
       <stop offset="1" stop-color="#0e1116"/>
     </linearGradient>
+
     <!-- One gradient in user space, so the tail blends into the ring at any size. -->
     <linearGradient id="amber" gradientUnits="userSpaceOnUse" x1="227" y1="227" x2="802" y2="802">
-      <stop offset="0" stop-color="#f6d49a"/>
-      <stop offset="0.45" stop-color="#e8b563"/>
-      <stop offset="1" stop-color="#d1933c"/>
+      <stop offset="0" stop-color="#f8dfae"/>
+      <stop offset="0.34" stop-color="#f3c97f"/>
+      <stop offset="0.70" stop-color="#e8ae57"/>
+      <stop offset="1" stop-color="#d5953a"/>
     </linearGradient>
+
+    <!-- recessed counter: a soft shadow on the upper left and nothing else -->
+    <radialGradient id="counter" cx="426" cy="424" r="286" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#04070a" stop-opacity="0.58"/>
+      <stop offset="0.55" stop-color="#04070a" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#04070a" stop-opacity="0.10"/>
+    </radialGradient>
+
     <filter id="lift" x="-25%" y="-25%" width="150%" height="150%">
       <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#000000" flood-opacity="0.36"/>
     </filter>
@@ -18,8 +38,13 @@
 
   <rect width="1024" height="1024" rx="224" fill="url(#tile)"/>
 
-  <g transform="translate(-6 -6)" filter="url(#lift)">
-    <circle cx="477" cy="477" r="202" fill="none" stroke="url(#amber)" stroke-width="96"/>
-    <path d="M620 620 L760 760" fill="none" stroke="url(#amber)" stroke-width="96" stroke-linecap="round"/>
+  <g filter="url(#lift)">
+    <!-- steep tapered tail first, so the ring covers the joint -->
+    <path d="M555 775L686 980A54 54 0 0 0 782 930L685 705Z" fill="url(#amber)"/>
+    <circle cx="492" cy="503" r="269" fill="none" stroke="url(#amber)" stroke-width="148"/>
   </g>
+
+  <!-- counter: soft recess only, nothing drawn inside -->
+  <circle cx="492" cy="503" r="195" fill="url(#counter)"/>
+  <path d="M164 445A333 333 0 0 1 325 215" fill="none" stroke="#fff4de" stroke-opacity="0.20" stroke-width="12" stroke-linecap="round"/>
 </svg>

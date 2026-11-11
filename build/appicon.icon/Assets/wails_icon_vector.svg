@@ -1,7 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <title>Quire</title>
-  <g transform="translate(-6 -6)">
-    <circle cx="477" cy="477" r="202" fill="none" stroke="#e8b563" stroke-width="96"/>
-    <path d="M620 620 L760 760" fill="none" stroke="#e8b563" stroke-width="96" stroke-linecap="round"/>
+  <!-- Silhouette layer for Icon Composer; same Q as build/appicon.svg. -->
+  <g fill="#e8b563">
+    <path d="M555 775L686 980A54 54 0 0 0 782 930L685 705Z"/>
+    <circle cx="492" cy="503" r="269" fill="none" stroke="#e8b563" stroke-width="148"/>
   </g>
 </svg>

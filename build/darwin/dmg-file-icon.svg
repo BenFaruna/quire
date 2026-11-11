@@ -3,14 +3,16 @@
 
   <!--
     Quire DMG volume icon (source for darwin/dmg-file-icon.png + .icns).
+    The Q geometry here is shared with build/appicon.svg: same ring, same tail.
     Edit knobs:
       tile     rect x/y 112, side 800, rx 181   (~11% margin, macOS icon grid)
       Q ring   centre (497,505), path radius 210, stroke width 116
-               outer 268, inner 152; the tail is the same stroke with a round cap
-      tail     M645 653 to 890 898 (45 degrees, clipped by the tile corner)
+               outer 268, inner 152
+      tail     steep 62 degrees, tapered 116 > 84, tip at (685,858)
+               quad M545 717 L648 878, tip cap A42, back edge L647 663
+      counter  no lens: soft recess only, nothing drawn inside
       amber    #F8DFAE > #F3C97F > #E8AE57 > #D5953A, userSpaceOnUse 330,240 to 820,820
       ribbon   x 684 to 738, y 112 to 356, notch apex at 711,328
-      motif    dashed r136, solid r114: hash, chevron, needle
     Render: magick -background none dmg-file-icon.svg -resize 1254x1254 dmg-file-icon.png
   -->
 
@@ -30,10 +32,11 @@
       <stop offset="1" stop-color="#E9A63E" stop-opacity="0"/>
     </radialGradient>
 
-    <radialGradient id="bowlShade" cx="497" cy="505" r="158" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#04070A" stop-opacity="0.62"/>
-      <stop offset="0.72" stop-color="#04070A" stop-opacity="0.34"/>
-      <stop offset="1" stop-color="#04070A" stop-opacity="0.05"/>
+    <!-- recessed counter: shadow falls on the upper left, away from the light -->
+    <radialGradient id="bowlShade" cx="410" cy="420" r="230" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#04070A" stop-opacity="0.58"/>
+      <stop offset="0.55" stop-color="#04070A" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#04070A" stop-opacity="0.10"/>
     </radialGradient>
 
     <linearGradient id="amber" x1="330" y1="240" x2="820" y2="820" gradientUnits="userSpaceOnUse">
@@ -81,33 +84,17 @@
     </g>
 
     <!-- Q glow -->
-    <g filter="url(#amberGlow)" fill="none" stroke="#F0AE4A" stroke-opacity="0.38" stroke-linecap="round">
-      <path d="M645 653L890 898" stroke-width="116"/>
-      <circle cx="497" cy="505" r="210" stroke-width="116"/>
+    <g filter="url(#amberGlow)">
+      <path d="M545 717L648 878A42 42 0 0 0 722 838L647 663Z" fill="#F0AE4A" fill-opacity="0.38"/>
+      <circle cx="497" cy="505" r="210" fill="none" stroke="#F0AE4A" stroke-opacity="0.38" stroke-width="116"/>
     </g>
 
-    <!-- Q -->
-    <g fill="none" stroke="url(#amber)" stroke-linecap="round">
-      <path d="M645 653L890 898" stroke-width="116"/>
-      <circle cx="497" cy="505" r="210" stroke-width="116"/>
-    </g>
-    <circle cx="890" cy="898" r="54" fill="#F7D79A" fill-opacity="0.16"/>
+    <!-- Q: steep tapered tail, then the ring -->
+    <path d="M545 717L648 878A42 42 0 0 0 722 838L647 663Z" fill="url(#amber)"/>
+    <circle cx="497" cy="505" r="210" fill="none" stroke="url(#amber)" stroke-width="116"/>
 
-    <!-- bowl: inset shade, rim light, compass motif -->
+    <!-- counter: soft recess only, nothing drawn inside -->
     <circle cx="497" cy="505" r="152" fill="url(#bowlShade)"/>
-    <circle cx="497" cy="505" r="150" stroke="#2A1606" stroke-opacity="0.26" stroke-width="12" fill="none"/>
-    <path d="M365 429A152 152 0 0 1 573 373" fill="none" stroke="#FFF4DE" stroke-opacity="0.50" stroke-width="9" stroke-linecap="round"/>
     <path d="M241 460A260 260 0 0 1 367 280" fill="none" stroke="#FFF4DE" stroke-opacity="0.20" stroke-width="10" stroke-linecap="round"/>
-
-    <g fill="none" stroke="#F2DFBE" stroke-linecap="round">
-      <circle cx="497" cy="505" r="136" stroke-width="2.5" stroke-opacity="0.15" stroke-dasharray="4 12"/>
-      <circle cx="497" cy="505" r="114" stroke-width="2" stroke-opacity="0.20"/>
-      <g stroke-width="3.5" stroke-opacity="0.38">
-        <path d="M486 402V428 M508 402V428 M478 410H516 M478 420H516"/>
-      </g>
-      <path d="M466 470L497 445L528 470" stroke-width="4" stroke-opacity="0.40"/>
-      <path d="M497 493V565" stroke-width="4" stroke-opacity="0.50"/>
-      <circle cx="497" cy="493" r="9" stroke-width="4" stroke-opacity="0.55"/>
-    </g>
   </g>
 </svg>
