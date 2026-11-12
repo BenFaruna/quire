@@ -697,9 +697,9 @@ button {
 .md-toolbar button {
     display: inline-grid;
     place-items: center;
-    min-width: 28px;
+    min-width: 26px;
     height: 26px;
-    padding: 0 6px;
+    padding: 0 5px;
     border: 0;
     border-radius: 5px;
     background: transparent;
@@ -721,7 +721,7 @@ button {
 .toolbar-sep {
     width: 1px;
     height: 16px;
-    margin: 0 5px;
+    margin: 0 4px;
     background: var(--border);
 }
 
