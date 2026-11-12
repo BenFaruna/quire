@@ -1281,6 +1281,20 @@ function mermaidConfig(): MermaidConfig {
               lineColor: "#8b97a8",
               secondaryColor: "#202a36",
               tertiaryColor: "#141a22",
+              mainBkg: "#1a222d",
+              nodeBorder: "#2c3642",
+              clusterBkg: "#141a22",
+              clusterBorder: "#2d3745",
+              // Without this Mermaid leaves edge labels on a white pill, which
+              // glares against the dark page.
+              edgeLabelBackground: "#141922",
+              textColor: "#dbe3ee",
+              titleColor: "#dbe3ee",
+              secondaryTextColor: "#dbe3ee",
+              tertiaryTextColor: "#dbe3ee",
+              nodeTextColor: "#dbe3ee",
+              labelTextColor: "#dbe3ee",
+              arrowheadColor: "#8b97a8",
           };
     return {
         startOnLoad: false,
