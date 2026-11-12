@@ -1251,6 +1251,8 @@ let mermaidSeq = 0;
 // from whichever theme is on when the diagram is drawn.
 function mermaidConfig(): MermaidConfig {
     const light = currentTheme() === "light";
+    // "base" is the only Mermaid theme that honours themeVariables; "default"
+    // ignores them and paints its stock lavender boxes on the page.
     const palette = light
         ? {
               primaryColor: "#fffdf8",
@@ -1259,6 +1261,18 @@ function mermaidConfig(): MermaidConfig {
               lineColor: "#5a6472",
               secondaryColor: "#f1ebdf",
               tertiaryColor: "#f6f1e7",
+              mainBkg: "#fffdf8",
+              nodeBorder: "#c7bcaa",
+              clusterBkg: "#f7f2e7",
+              clusterBorder: "#ddd3c2",
+              edgeLabelBackground: "#f6f1e7",
+              textColor: "#202632",
+              titleColor: "#202632",
+              secondaryTextColor: "#202632",
+              tertiaryTextColor: "#202632",
+              nodeTextColor: "#202632",
+              labelTextColor: "#202632",
+              arrowheadColor: "#5a6472",
           }
         : {
               primaryColor: "#1a222d",
@@ -1272,7 +1286,7 @@ function mermaidConfig(): MermaidConfig {
         startOnLoad: false,
         securityLevel: "strict",
         suppressErrorRendering: true,
-        theme: light ? "default" : "dark",
+        theme: light ? "base" : "dark",
         darkMode: !light,
         fontFamily: "inherit",
         themeVariables: { background: "transparent", fontSize: "14px", ...palette },
