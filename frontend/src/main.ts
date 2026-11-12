@@ -148,6 +148,19 @@ const THEME_KEY = "quire.theme";
 
 type Theme = "dark" | "light";
 
+const systemThemeQuery = window.matchMedia("(prefers-color-scheme: light)");
+
+// An explicit choice from the toggle wins; until the user makes one, the OS
+// decides, so the app opens in the palette the rest of the desktop is using.
+function storedTheme(): Theme | null {
+    const value = storage.get(THEME_KEY);
+    return value === "light" || value === "dark" ? value : null;
+}
+
+function systemTheme(): Theme {
+    return systemThemeQuery.matches ? "light" : "dark";
+}
+
 function currentTheme(): Theme {
     return document.documentElement.dataset.theme === "light" ? "light" : "dark";
 }
@@ -160,7 +173,15 @@ function applyTheme(theme: Theme) {
     themeToggle.setAttribute("aria-pressed", String(theme === "light"));
 }
 
-applyTheme(storage.get(THEME_KEY) === "light" ? "light" : "dark");
+applyTheme(storedTheme() ?? systemTheme());
+
+// Keep following the desktop until the user picks a theme of their own.
+systemThemeQuery.addEventListener("change", () => {
+    if (storedTheme()) return;
+    applyTheme(systemTheme());
+    mermaidPromise = null;
+    void renderPreview();
+});
 
 function loadCollapsedStatuses(): string[] {
     try {

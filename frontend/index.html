@@ -6,12 +6,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Quire</title>
     <script>
-        // Set the theme before the first paint so a light-mode user never sees a
-        // dark flash. main.ts owns the rest of the toggle.
+        // Resolve the theme before the first paint: an explicit choice wins,
+        // otherwise the OS decides, so a light desktop never flashes dark.
+        // main.ts keeps the two in sync afterwards.
         try {
+            var stored = localStorage.getItem("quire.theme");
             document.documentElement.dataset.theme =
-                localStorage.getItem("quire.theme") === "light" ? "light" : "dark";
-        } catch { }
+                stored === "light" || stored === "dark"
+                    ? stored
+                    : window.matchMedia("(prefers-color-scheme: light)").matches
+                      ? "light"
+                      : "dark";
+        } catch {}
     </script>
 </head>
 
