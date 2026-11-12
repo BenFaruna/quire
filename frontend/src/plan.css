@@ -477,8 +477,10 @@
     padding: 2px 5px;
     border: 0;
     border-radius: 4px;
-    background: var(--bg-active);
-    color: var(--text-muted);
+    /* Its own tint: --bg-active is also the selected day's surface, which made
+       a chip on the selected day disappear. */
+    background: rgba(var(--accent-rgb), 0.14);
+    color: var(--text);
     font-size: 10.5px;
     text-align: left;
     overflow: hidden;
@@ -487,7 +489,7 @@
 }
 
 .calendar-chip:hover {
-    background: var(--bg-hover);
+    background: rgba(var(--accent-rgb), 0.24);
     color: var(--text);
 }
 
