@@ -7,6 +7,7 @@
     --bg-elevated: #141922;
     --bg-sidebar: #10151c;
     --bg-hover: #1a212b;
+    --row-stripe: rgba(255, 255, 255, 0.015);
     --bg-active: #1e2733;
     --border: #222a35;
     --border-strong: #2d3745;
@@ -71,6 +72,7 @@
     --bg-elevated: #fffdf8;
     --bg-sidebar: #f1ebdf;
     --bg-hover: #ece3d4;
+    --row-stripe: rgba(17, 22, 29, 0.04);
     --bg-active: #e4dac8;
     --border: #ddd3c2;
     --border-strong: #c7bcaa;
@@ -1196,7 +1198,7 @@ button {
 }
 
 .markdown-body tr:nth-child(even) td {
-    background: rgba(255, 255, 255, 0.015);
+    background: var(--row-stripe);
 }
 
 .markdown-body img {
