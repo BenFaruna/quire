@@ -914,6 +914,11 @@ button {
     line-height: 1.55;
 }
 
+.modal input::placeholder,
+.modal textarea::placeholder {
+    color: var(--text-dim);
+}
+
 .modal-actions {
     display: flex;
     justify-content: flex-end;
