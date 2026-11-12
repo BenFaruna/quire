@@ -755,15 +755,6 @@ function nextHalfHour(): number {
     return date.getTime();
 }
 
-function dateInputValue(ms: number): string {
-    const date = new Date(ms);
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
-function timeInputValue(ms: number): string {
-    const date = new Date(ms);
-    return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
 
 function scheduledSlot(plan: PlanState | null, platform: string) {
     if (!plan) return null;
@@ -813,21 +804,104 @@ export async function openSchedulePopover(options: SchedulePopoverOptions): Prom
         panel.append(text("p", "plan-field", platformLabel(platform)));
     }
 
+    // Native date and time inputs paint their active segment in the system
+    // highlight colour, which no stylesheet can reach. These number boxes keep
+    // the popover entirely inside the palette.
+    const boxes: HTMLInputElement[] = [];
+    const makeBox = (className: string, length: number, label: string, max: number): HTMLInputElement => {
+        const input = document.createElement("input");
+        input.type = "text";
+        input.className = `plan-num ${className}`;
+        input.inputMode = "numeric";
+        input.autocomplete = "off";
+        input.maxLength = length;
+        input.setAttribute("aria-label", label);
+        input.addEventListener("focus", () => input.select());
+        input.addEventListener("input", () => {
+            input.value = input.value.replace(/\D/g, "").slice(0, length);
+            const index = boxes.indexOf(input);
+            if (input.value.length === length && index >= 0 && index < boxes.length - 1) {
+                boxes[index + 1].focus();
+            }
+        });
+        input.addEventListener("keydown", (event) => {
+            const step = event.key === "ArrowUp" ? 1 : event.key === "ArrowDown" ? -1 : 0;
+            if (!step) return;
+            event.preventDefault();
+            const next = Math.min(max, Math.max(0, Number(input.value || 0) + step));
+            input.value = String(next).padStart(length, "0");
+        });
+        boxes.push(input);
+        return input;
+    };
+
+    let meridiem: "am" | "pm" = "pm";
+    const meridiemButtons = new Map<"am" | "pm", HTMLButtonElement>();
+    const setMeridiem = (value: "am" | "pm") => {
+        meridiem = value;
+        for (const [key, node] of meridiemButtons) node.classList.toggle("is-active", key === value);
+    };
+
     const dateField = el("label", "plan-field");
     dateField.append(text("span", "", "Date"));
-    const dateInput = document.createElement("input");
-    dateInput.type = "date";
-    dateInput.value = dateInputValue(initialAt);
-    dateField.append(dateInput);
+    const dateRow = el("div", "plan-date");
+    const monthBox = makeBox("plan-month", 2, "Month", 12);
+    const dayBox = makeBox("plan-day", 2, "Day", 31);
+    const yearBox = makeBox("plan-year", 4, "Year", 2999);
+    dateRow.append(monthBox, text("span", "plan-sep", "/"), dayBox, text("span", "plan-sep", "/"), yearBox);
+    dateField.append(dateRow);
     panel.append(dateField);
 
     const timeField = el("label", "plan-field");
     timeField.append(text("span", "", "Time"));
-    const timeInput = document.createElement("input");
-    timeInput.type = "time";
-    timeInput.value = timeInputValue(initialAt);
-    timeField.append(timeInput);
+    const timeRow = el("div", "plan-time");
+    const hourBox = makeBox("plan-hour", 2, "Hour", 12);
+    const minuteBox = makeBox("plan-minute", 2, "Minute", 59);
+    const meridiemToggle = el("div", "segmented segmented-sm plan-ampm");
+    for (const value of ["am", "pm"] as const) {
+        const node = el("button");
+        node.type = "button";
+        node.textContent = value.toUpperCase();
+        node.addEventListener("click", () => setMeridiem(value));
+        meridiemButtons.set(value, node);
+        meridiemToggle.append(node);
+    }
+    timeRow.append(hourBox, text("span", "plan-sep", ":"), minuteBox, meridiemToggle);
+    timeField.append(timeRow);
     panel.append(timeField);
+
+    type Picked = { local: Date; hour24: number; minute: number; day: number };
+
+    const writeStamp = (at: number) => {
+        const date = new Date(at);
+        const hours = date.getHours();
+        monthBox.value = String(date.getMonth() + 1).padStart(2, "0");
+        dayBox.value = String(date.getDate()).padStart(2, "0");
+        yearBox.value = String(date.getFullYear());
+        hourBox.value = String(hours % 12 === 0 ? 12 : hours % 12).padStart(2, "0");
+        minuteBox.value = String(date.getMinutes()).padStart(2, "0");
+        setMeridiem(hours < 12 ? "am" : "pm");
+    };
+
+    const readStamp = (): Picked | null => {
+        const fields = [monthBox, dayBox, yearBox, hourBox, minuteBox];
+        if (fields.some((box) => box.value === "")) return null;
+        const [month, day, year, hour12, minute] = fields.map((box) => Number(box.value));
+        if (
+            ![month, day, year, hour12, minute].every(Number.isInteger) ||
+            month < 1 || month > 12 ||
+            day < 1 || day > 31 ||
+            year < 1970 || year > 2999 ||
+            hour12 < 1 || hour12 > 12 ||
+            minute < 0 || minute > 59
+        ) {
+            return null;
+        }
+        const hour24 = (hour12 % 12) + (meridiem === "pm" ? 12 : 0);
+        return { local: new Date(year, month - 1, day, hour24, minute, 0, 0), hour24, minute, day };
+    };
+
+    writeStamp(initialAt);
 
     const error = text("p", "plan-error", "");
     error.hidden = true;
@@ -858,10 +932,7 @@ export async function openSchedulePopover(options: SchedulePopoverOptions): Prom
                 other.classList.toggle("is-active", other === node);
             }
             const slot = scheduledSlot(plan, platform);
-            if (slot) {
-                dateInput.value = dateInputValue(slot.scheduledAt);
-                timeInput.value = timeInputValue(slot.scheduledAt);
-            }
+            if (slot) writeStamp(slot.scheduledAt);
             updatePrimary();
             confirmedGap = false;
             error.hidden = true;
@@ -870,22 +941,21 @@ export async function openSchedulePopover(options: SchedulePopoverOptions): Prom
 
     primary.addEventListener("click", () => {
         error.hidden = true;
-        if (!dateInput.value || !timeInput.value) {
+        const picked = readStamp();
+        if (!picked) {
             error.textContent = "Choose a date and time.";
             error.hidden = false;
             return;
         }
-        const [year, month, day] = dateInput.value.split("-").map(Number);
-        const [hour, minute] = timeInput.value.split(":").map(Number);
-        const local = new Date(year, month - 1, day, hour, minute, 0, 0);
-        if (Number.isNaN(local.getTime())) {
+        const local = picked.local;
+        if (Number.isNaN(local.getTime()) || local.getDate() !== picked.day) {
             error.textContent = "That date and time is not valid.";
             error.hidden = false;
             return;
         }
         if (
             !confirmedGap &&
-            (local.getHours() !== hour || local.getMinutes() !== minute)
+            (local.getHours() !== picked.hour24 || local.getMinutes() !== picked.minute)
         ) {
             confirmedGap = true;
             error.textContent = `That wall-clock time does not exist in this timezone; it will be saved as ${timeLabel(local.getTime())}. Press again to confirm.`;
@@ -914,7 +984,7 @@ export async function openSchedulePopover(options: SchedulePopoverOptions): Prom
     document.body.append(panel);
     popover = panel;
     positionPopover(panel, options.anchor);
-    dateInput.focus();
+    monthBox.focus();
 
     panel.addEventListener("keydown", (event) => {
         if (event.key === "Escape") {

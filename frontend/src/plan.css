@@ -536,13 +536,41 @@
     font-size: 11px;
 }
 
-.plan-field input {
-    padding: 7px 9px;
+.plan-date,
+.plan-time {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.plan-sep {
+    color: var(--text-dim);
+    font-size: 12px;
+}
+
+.plan-field .plan-num {
+    width: 34px;
+    padding: 7px 2px;
     border: 1px solid var(--border-strong);
     border-radius: 6px;
     background: var(--bg-sunken);
     color: var(--text);
     font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    outline: none;
+}
+
+.plan-field .plan-num.plan-year {
+    width: 56px;
+}
+
+.plan-field .plan-num:focus {
+    border-color: rgba(var(--accent-rgb), 0.55);
+}
+
+.plan-ampm {
+    margin-left: 2px;
 }
 
 .plan-popover .segmented {
