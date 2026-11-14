@@ -1,5 +1,9 @@
 # Quire
 
+<p align="center">
+  <img src="build/appicon.png" alt="Quire icon" width="128" height="128">
+</p>
+
 A local-first Markdown notebook built with [Wails v3](https://v3.wails.io/), Go,
 and TypeScript.
 
@@ -308,15 +312,30 @@ reloads it when the editor is clean; if there are unsaved edits it shows a
 ```bash
 wails3 dev        # run with hot reload
 wails3 build      # production build → bin/quire
-go test .         # backend tests
+wails3 package    # native package/installer for the current OS
+go test ./...     # backend tests
 
 cd frontend
-npx tsc --noEmit  # type-check the UI
+npm run typecheck # type-check the UI
+npm test          # frontend unit tests
 npm run build     # rebuild embedded frontend assets
 ```
 
 After changing an exported Go service or model, regenerate the typed bindings
 with `wails3 generate bindings -ts` from the repository root.
+
+## Releases
+
+Pushing a `v*` tag runs the release workflow, which packages the app on Linux,
+macOS and Windows and attaches the results to a draft GitHub Release:
+
+- `quire-<version>-linux-amd64.AppImage`, `.deb`, `.rpm`
+- `quire-<version>-darwin-arm64.app.zip`
+- `quire-<version>-windows-amd64-installer.exe`
+
+The version comes from the tag without its leading `v`. Manual workflow runs
+build `0.0.0.dev.<sha>` assets without creating a release. Review the draft
+release before publishing it.
 
 ## Icons and packaging art
 
@@ -400,8 +419,12 @@ macOS-only too: `wails3 tool package --format dmg` needs `hdiutil`.
 
 ```
 main.go             # app bootstrap, window, service registration
+config.go           # app identity and per-user paths
 noteservice.go      # note CRUD, file storage, seeding, Markdown → HTML
 export.go           # Markdown/HTML export + zip bundling
+planner.go          # planner stages, slots and derived status
+planstate.go        # <id>.plan.json sidecar format and locking
+reminder.go         # due-reminder timers and notifications
 publish.go          # note → platform drafts, blog tags, content hash
 publishremote.go    # PublishService: connect, publish, update, unlink
 publish_devto.go    # dev.to REST client
@@ -414,18 +437,20 @@ mcp.go              # stdio MCP server: tools, resources, prompts, logging
 watcher.go          # fsnotify watcher + external-change event
 categories.go       # category store, assignments and daily log entries
 lock.go             # cross-process notes-directory lock
-mcp_test.go
-watcher_test.go
-noteservice_test.go
-publish_test.go
-publish_blog_test.go
-publish_remote_test.go
+signal_linux.go     # hand SIGUSR1 back to WebKit on Linux
+signal_other.go     # signal handling stub for other platforms
+*_test.go           # backend, planner and publishing tests
 frontend/
   index.html
   src/main.ts       # UI: list, editor, preview, shortcuts
   src/home.ts       # home screen and category dialog
+  src/home.css      # home screen and category dialog styles
+  src/planner.ts    # queue, history, calendar and schedule picker
+  src/plan.css      # planner surfaces and schedule picker styles
+  src/platforms.ts  # publishing platform metadata and limits
   src/publish.ts    # publish dialog: social drafts, blog targets, tracking
   src/style.css
+  src/*.test.ts     # frontend unit tests
   bindings/         # generated TypeScript bindings (do not edit)
 ```
 
