@@ -137,6 +137,10 @@ jobs:
       contents: write
 
     steps:
+      # gh needs to run inside a git repository; checkout also makes the
+      # tag and its history available when generating release notes.
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: dist
