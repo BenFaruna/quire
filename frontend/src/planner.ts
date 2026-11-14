@@ -808,7 +808,7 @@ export async function openSchedulePopover(options: SchedulePopoverOptions): Prom
     // highlight colour, which no stylesheet can reach. These number boxes keep
     // the popover entirely inside the palette.
     const boxes: HTMLInputElement[] = [];
-    const makeBox = (className: string, length: number, label: string, max: number): HTMLInputElement => {
+    const makeBox = (className: string, length: number, label: string, min: number, max: number): HTMLInputElement => {
         const input = document.createElement("input");
         input.type = "text";
         input.className = `plan-num ${className}`;
@@ -828,7 +828,7 @@ export async function openSchedulePopover(options: SchedulePopoverOptions): Prom
             const step = event.key === "ArrowUp" ? 1 : event.key === "ArrowDown" ? -1 : 0;
             if (!step) return;
             event.preventDefault();
-            const next = Math.min(max, Math.max(0, Number(input.value || 0) + step));
+            const next = Math.min(max, Math.max(min, Number(input.value || 0) + step));
             input.value = String(next).padStart(length, "0");
         });
         boxes.push(input);
@@ -845,9 +845,9 @@ export async function openSchedulePopover(options: SchedulePopoverOptions): Prom
     const dateField = el("label", "plan-field");
     dateField.append(text("span", "", "Date"));
     const dateRow = el("div", "plan-date");
-    const monthBox = makeBox("plan-month", 2, "Month", 12);
-    const dayBox = makeBox("plan-day", 2, "Day", 31);
-    const yearBox = makeBox("plan-year", 4, "Year", 2999);
+    const monthBox = makeBox("plan-month", 2, "Month", 1, 12);
+    const dayBox = makeBox("plan-day", 2, "Day", 1, 31);
+    const yearBox = makeBox("plan-year", 4, "Year", 1970, 2999);
     dateRow.append(monthBox, text("span", "plan-sep", "/"), dayBox, text("span", "plan-sep", "/"), yearBox);
     dateField.append(dateRow);
     panel.append(dateField);
@@ -855,8 +855,8 @@ export async function openSchedulePopover(options: SchedulePopoverOptions): Prom
     const timeField = el("label", "plan-field");
     timeField.append(text("span", "", "Time"));
     const timeRow = el("div", "plan-time");
-    const hourBox = makeBox("plan-hour", 2, "Hour", 12);
-    const minuteBox = makeBox("plan-minute", 2, "Minute", 59);
+    const hourBox = makeBox("plan-hour", 2, "Hour", 1, 12);
+    const minuteBox = makeBox("plan-minute", 2, "Minute", 0, 59);
     const meridiemToggle = el("div", "segmented segmented-sm plan-ampm");
     for (const value of ["am", "pm"] as const) {
         const node = el("button");
