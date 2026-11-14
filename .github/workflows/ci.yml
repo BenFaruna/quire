@@ -1,0 +1,56 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+          - os: macos-latest
+            goos: darwin
+          - os: windows-latest
+            goos: windows
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # Read from go.mod's `go` directive (1.26.0) so the two cannot drift.
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+
+      # Wails v3's default Linux backend is the GTK4 + WebKitGTK 6.0 stack
+      # (pkg/application has `#cgo pkg-config: gtk4 webkitgtk-6.0`), and the
+      # Linux task builds natively when a C compiler is present. The hosted
+      # image ships no GUI development headers, so both bindings generation
+      # and `go build` need these installed.
+      - name: Install Linux GUI dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+
+      - name: Build
+        run: wails3 build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-${{ matrix.goos }}
+          path: bin/
