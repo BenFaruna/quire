@@ -61,10 +61,13 @@ jobs:
         uses: arduino/setup-task@v2
 
       # windows-latest ships no makensis, which the NSIS installer task
-      # invoked by `wails3 package` needs.
+      # invoked by `wails3 package` needs. The Chocolatey package installs
+      # NSIS under Program Files but creates no shim, so put it on PATH.
       - name: Install NSIS
         if: runner.os == 'Windows'
-        run: choco install nsis --yes --no-progress
+        run: |
+          choco install nsis --yes --no-progress
+          'C:\Program Files (x86)\NSIS' | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
 
       # nfpm requires a version without the tag's leading "v". Manual
       # runs get a sortable dev version instead of an empty one.
