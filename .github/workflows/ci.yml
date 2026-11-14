@@ -44,22 +44,21 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install Wails CLI
-        run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0
-
-      - name: Install Task
-        uses: arduino/setup-task@v2
-
       # Wails v3's default Linux backend is the GTK4 + WebKitGTK 6.0 stack
-      # (pkg/application has `#cgo pkg-config: gtk4 webkitgtk-6.0`), and the
-      # Linux task builds natively when a C compiler is present. The hosted
-      # image ships no GUI development headers, so both bindings generation
-      # and `go build` need these installed.
+      # (pkg/application has `#cgo pkg-config: gtk4 webkitgtk-6.0`). This has
+      # to come before installing the Wails CLI: `go install` links the CLI
+      # and therefore needs the same GUI headers and libraries.
       - name: Install Linux GUI dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
 
       # windows-latest ships no makensis, which the NSIS installer task
       # invoked by `wails3 package` needs.
