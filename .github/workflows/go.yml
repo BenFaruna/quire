@@ -26,13 +26,23 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Typecheck frontend
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Test frontend
+        working-directory: frontend
+        run: npm test
+
       # main.go embeds all:frontend/dist, and that directory is gitignored, so a
       # fresh clone cannot compile until the frontend is built.
       - name: Build frontend
         working-directory: frontend
-        run: |
-          npm ci
-          npm run build
+        run: npm run build
 
       # Wails is cgo-only on Linux: the packages that import pkg/application
       # need the GTK and WebKit headers. The default backend is GTK4 +
