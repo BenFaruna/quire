@@ -7,6 +7,8 @@ build/linux/appimage/build
 # Staging copies made by `wails3 package` before building the AppImage
 build/linux/appimage/quire
 build/linux/appimage/quire.png
+# Version-stamped copy of windows/info.json made by generate:syso
+build/windows/info.versioned.json
 build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
 # Mobile generated (per-machine; overlays hold absolute paths)
 build/ios/xcode/overlay.json
