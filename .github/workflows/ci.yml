@@ -1,4 +1,4 @@
-name: Build
+name: Release
 
 on:
   push:
@@ -19,10 +19,13 @@ jobs:
         include:
           - os: ubuntu-latest
             goos: linux
+            arch: amd64
           - os: macos-latest
             goos: darwin
+            arch: arm64
           - os: windows-latest
             goos: windows
+            arch: amd64
 
     runs-on: ${{ matrix.os }}
 
@@ -58,11 +61,81 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
 
-      - name: Build
-        run: wails3 build
+      # windows-latest ships no makensis, which the NSIS installer task
+      # invoked by `wails3 package` needs.
+      - name: Install NSIS
+        if: runner.os == 'Windows'
+        run: choco install nsis --yes --no-progress
+
+      - name: Package
+        run: wails3 package
+
+      # Give every platform's outputs the same tag-prefixed, arch-qualified
+      # name so the artifacts can share one release without collisions.
+      - name: Stage release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            version="${GITHUB_REF_NAME//\//-}"
+          else
+            version="dev-${GITHUB_SHA::7}"
+          fi
+          platform="${{ matrix.goos }}-${{ matrix.arch }}"
+          mkdir -p dist
+
+          case "${RUNNER_OS}" in
+            Linux)
+              for file in bin/*.AppImage bin/*.deb bin/*.rpm; do
+                [ -f "$file" ] || continue
+                cp "$file" "dist/quire-${version}-${platform}.${file##*.}"
+              done
+              ;;
+            macOS)
+              ditto -c -k --keepParent bin/quire.app \
+                "dist/quire-${version}-${platform}.app.zip"
+              ;;
+            Windows)
+              for file in bin/*-installer.exe; do
+                [ -f "$file" ] || continue
+                cp "$file" "dist/quire-${version}-${platform}-installer.exe"
+              done
+              ;;
+          esac
+
+          test -n "$(ls -A dist)"
+          ls -l dist
 
       - uses: actions/upload-artifact@v4
         with:
-          name: app-${{ matrix.goos }}
-          path: bin/
+          name: assets-${{ matrix.goos }}
+          path: dist/
           if-no-files-found: error
+
+  release:
+    name: Draft GitHub release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create or update the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --draft \
+              --title "Quire $GITHUB_REF_NAME" \
+              --generate-notes \
+              dist/*
+          fi
