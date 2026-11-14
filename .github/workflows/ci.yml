@@ -26,10 +26,13 @@ jobs:
         with:
           # Read from go.mod's `go` directive (1.26.0) so the two cannot drift.
           go-version-file: go.mod
+          cache: true
 
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0
