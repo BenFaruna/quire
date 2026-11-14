@@ -5,6 +5,13 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     strategy:
@@ -58,3 +65,4 @@ jobs:
         with:
           name: app-${{ matrix.goos }}
           path: bin/
+          if-no-files-found: error
