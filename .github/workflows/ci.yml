@@ -67,20 +67,27 @@ jobs:
         if: runner.os == 'Windows'
         run: choco install nsis --yes --no-progress
 
+      # nfpm requires a version without the tag's leading "v". Manual
+      # runs get a sortable dev version instead of an empty one.
+      - name: Determine package version
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          else
+            echo "VERSION=0.0.0.dev.${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          fi
+
       - name: Package
         run: wails3 package
 
-      # Give every platform's outputs the same tag-prefixed, arch-qualified
+      # Give every platform's outputs the same versioned, arch-qualified
       # name so the artifacts can share one release without collisions.
       - name: Stage release assets
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            version="${GITHUB_REF_NAME//\//-}"
-          else
-            version="dev-${GITHUB_SHA::7}"
-          fi
+          version="${VERSION}"
           platform="${{ matrix.goos }}-${{ matrix.arch }}"
           mkdir -p dist
 
