@@ -1,0 +1,73 @@
+name: Go
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vet-build-test:
+    name: vet, build, test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # go.mod declares `go 1.26.0` and pins no toolchain, so this is the
+          # only place the version needs to be stated.
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Typecheck frontend
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Test frontend
+        working-directory: frontend
+        run: npm test
+
+      # main.go embeds all:frontend/dist, and that directory is gitignored, so a
+      # fresh clone cannot compile until the frontend is built.
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      # Wails is cgo-only on Linux: the packages that import pkg/application
+      # need the GTK and WebKit headers. The default backend is GTK4 +
+      # WebKitGTK 6.0 (`#cgo pkg-config: gtk4 webkitgtk-6.0`); the GTK3 /
+      # WebKit2GTK 4.1 stack is only used with the legacy `gtk3` build tag.
+      # Same set as build/docker/Dockerfile.cross.
+      - name: Install Linux GUI dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+
+      - name: go vet
+        run: go vet ./...
+
+      # `go build .` rather than `go build ./...`: build/ios holds a
+      # `//go:build !ios` package main with no func main, which breaks ./...
+      - name: go build
+        run: go build -o /dev/null .
+
+      - name: go test
+        run: go test ./...

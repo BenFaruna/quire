@@ -123,6 +123,9 @@ tasks:
       - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.app"
       - cp "{{.BIN_DIR}}/{{.APP_NAME | lower}}" "{{.BIN_DIR}}/{{.APP_NAME}}.app/"
       - cp build/ios/Info.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/"
+      - task: stamp:app:version
+        vars:
+          APP_BUNDLE: '{{.BIN_DIR}}/{{.APP_NAME}}.app'
       - |
         # Embed the provisioning profile for device builds when provided
         if [ "{{.IOS_PLATFORM}}" = "device" ] && [ -n "{{.PROVISIONING_PROFILE}}" ]; then
@@ -162,6 +165,17 @@ tasks:
         else
           codesign --force --sign "{{.CODESIGN_IDENTITY}}" "{{.BIN_DIR}}/{{.APP_NAME}}.app"
         fi
+
+  stamp:app:version:
+    summary: Writes VERSION into an iOS app bundle's Info.plist
+    internal: true
+    cmds:
+      - cmd: /usr/libexec/PlistBuddy -c "Set :CFBundleVersion {{.VERSION}}" -c "Set :CFBundleShortVersionString {{.VERSION}}" "{{.APP_BUNDLE}}/Info.plist"
+        platforms: [darwin]
+      - cmd: sed -i 's|<string>0\.0\.0</string>|<string>{{.VERSION}}</string>|g' "{{.APP_BUNDLE}}/Info.plist"
+        platforms: [linux]
+    vars:
+      VERSION: '{{.VERSION | default "0.0.0"}}'
 
   deploy-simulator:
     summary: Deploy to iOS Simulator
@@ -295,6 +309,9 @@ tasks:
       - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app"
       - cp "{{.BIN_DIR}}/{{.APP_NAME | lower}}" "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/{{.APP_NAME | lower}}"
       - cp build/ios/Info.dev.plist "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Info.plist"
+      - task: stamp:app:version
+        vars:
+          APP_BUNDLE: '{{.BIN_DIR}}/{{.APP_NAME}}.dev.app'
       - |
         # Compile asset catalog and embed icons for dev bundle
         APP_BUNDLE="{{.BIN_DIR}}/{{.APP_NAME}}.dev.app"

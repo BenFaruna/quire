@@ -11,7 +11,10 @@ info:
   description: "A local-first Markdown notebook" # The application description
   copyright: "© 2026, BenNotes" # Copyright text
   comments: "Quire" # Comments
-  version: "0.0.1" # The application version
+  # Default used when regenerating assets. Release builds stamp VERSION
+  # (the tag minus its leading "v") into Info.plist and info.json at
+  # package time, so this value does not need to track releases.
+  version: "0.0.0" # The application version
   # cfBundleIconName: "appicon" # The macOS icon name in Assets.car icon bundles (optional)
   #                               # Should match the name of your .icon file without the extension
   #                               # If not set and Assets.car exists, defaults to "appicon"

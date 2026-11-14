@@ -1,0 +1,155 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            arch: amd64
+          - os: macos-latest
+            goos: darwin
+            arch: arm64
+          - os: windows-latest
+            goos: windows
+            arch: amd64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # Read from go.mod's `go` directive (1.26.0) so the two cannot drift.
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+
+      # Wails v3's default Linux backend is the GTK4 + WebKitGTK 6.0 stack
+      # (pkg/application has `#cgo pkg-config: gtk4 webkitgtk-6.0`), and the
+      # Linux task builds natively when a C compiler is present. The hosted
+      # image ships no GUI development headers, so both bindings generation
+      # and `go build` need these installed.
+      - name: Install Linux GUI dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+
+      # windows-latest ships no makensis, which the NSIS installer task
+      # invoked by `wails3 package` needs.
+      - name: Install NSIS
+        if: runner.os == 'Windows'
+        run: choco install nsis --yes --no-progress
+
+      # nfpm requires a version without the tag's leading "v". Manual
+      # runs get a sortable dev version instead of an empty one.
+      - name: Determine package version
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="0.0.0.dev.${GITHUB_SHA::7}"
+          fi
+          echo "VERSION=${version}" >> "$GITHUB_ENV"
+
+          # Windows version resources and NSIS require numeric dotted
+          # versions, so drop any prerelease/build suffix there.
+          core="${version%%-*}"
+          IFS=. read -r major minor patch _ <<< "$core"
+          echo "WINDOWS_VERSION=${major:-0}.${minor:-0}.${patch:-0}" >> "$GITHUB_ENV"
+
+      - name: Package
+        run: wails3 package
+
+      # Give every platform's outputs the same versioned, arch-qualified
+      # name so the artifacts can share one release without collisions.
+      - name: Stage release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${VERSION}"
+          platform="${{ matrix.goos }}-${{ matrix.arch }}"
+          mkdir -p dist
+
+          case "${RUNNER_OS}" in
+            Linux)
+              for file in bin/*.AppImage bin/*.deb bin/*.rpm; do
+                [ -f "$file" ] || continue
+                cp "$file" "dist/quire-${version}-${platform}.${file##*.}"
+              done
+              ;;
+            macOS)
+              ditto -c -k --keepParent bin/quire.app \
+                "dist/quire-${version}-${platform}.app.zip"
+              ;;
+            Windows)
+              for file in bin/*-installer.exe; do
+                [ -f "$file" ] || continue
+                cp "$file" "dist/quire-${version}-${platform}-installer.exe"
+              done
+              ;;
+          esac
+
+          test -n "$(ls -A dist)"
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: assets-${{ matrix.goos }}
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    name: Draft GitHub release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create or update the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --draft \
+              --title "Quire $GITHUB_REF_NAME" \
+              --generate-notes \
+              dist/*
+          fi
