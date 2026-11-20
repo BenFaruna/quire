@@ -25,6 +25,15 @@ export function Backlog(limit: number): $CancellablePromise<$models.BacklogItem[
 }
 
 /**
+ * ClearPlatformDraft removes the saved draft for a platform and clears the
+ * rendition on that platform's scheduled slot. Done/skipped history is left
+ * alone so past posts keep their record.
+ */
+export function ClearPlatformDraft(noteID: string, platform: string): $CancellablePromise<$models.PlanState> {
+    return $Call.ByID(1131614308, noteID, platform);
+}
+
+/**
  * History returns done and skipped slots in [from, to) by effective completion
  * time, newest first. to == 0 means no upper bound.
  */
@@ -60,6 +69,15 @@ export function Queue($from: number, to: number): $CancellablePromise<$models.Qu
  */
 export function Reschedule(noteID: string, slotID: string, at: number): $CancellablePromise<$models.PlanState> {
     return $Call.ByID(1762042545, noteID, slotID, at);
+}
+
+/**
+ * SavePlatformDraft stores edited content for a platform even when the note
+ * has no scheduled slot. It also mirrors the draft onto that platform's
+ * scheduled slot, if one exists, so the queue and reminders stay in step.
+ */
+export function SavePlatformDraft(noteID: string, platform: string, r: $models.Rendition): $CancellablePromise<$models.PlanState> {
+    return $Call.ByID(43022634, noteID, platform, r);
 }
 
 /**
