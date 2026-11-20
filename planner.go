@@ -386,6 +386,105 @@ func (s *PlannerService) SaveRendition(noteID, slotID string, r Rendition) (Plan
 	r.SourceHash = publishContentHash(note.Title, note.Body)
 	r.EditedAt = s.now().UnixMilli()
 	slot.Rendition = &r
+	// Keep the per-platform draft in sync so opening Publish from the note
+	// (without a slot) shows the work the user just saved here.
+	platform := normalizePublishPlatform(slot.Platform)
+	if state.Drafts == nil {
+		state.Drafts = map[string]*Rendition{}
+	}
+	mirror := r
+	state.Drafts[platform] = &mirror
+	if err := writePlanState(root, state); err != nil {
+		return PlanState{}, err
+	}
+	return state, nil
+}
+
+// SavePlatformDraft stores edited content for a platform even when the note
+// has no scheduled slot. It also mirrors the draft onto that platform's
+// scheduled slot, if one exists, so the queue and reminders stay in step.
+func (s *PlannerService) SavePlatformDraft(noteID, platform string, r Rendition) (PlanState, error) {
+	platform, err := normalizePlatform(platform)
+	if err != nil {
+		return PlanState{}, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	root, err := s.notes.publishRoot()
+	if err != nil {
+		return PlanState{}, err
+	}
+	unlock, err := lockNotesDir(root)
+	if err != nil {
+		return PlanState{}, err
+	}
+	defer unlock()
+	if err := requireNote(root, noteID); err != nil {
+		return PlanState{}, err
+	}
+	state, _, err := readPlanState(root, noteID)
+	if err != nil {
+		return PlanState{}, err
+	}
+	note, err := s.notes.Get(noteID)
+	if err != nil {
+		return PlanState{}, err
+	}
+	r.SourceHash = publishContentHash(note.Title, note.Body)
+	r.EditedAt = s.now().UnixMilli()
+	if state.Drafts == nil {
+		state.Drafts = map[string]*Rendition{}
+	}
+	draft := r
+	state.Drafts[platform] = &draft
+	for i := range state.Slots {
+		slot := &state.Slots[i]
+		if slot.Status == slotScheduled && normalizePublishPlatform(slot.Platform) == platform {
+			mirror := r
+			slot.Rendition = &mirror
+		}
+	}
+	if err := writePlanState(root, state); err != nil {
+		return PlanState{}, err
+	}
+	return state, nil
+}
+
+// ClearPlatformDraft removes the saved draft for a platform and clears the
+// rendition on that platform's scheduled slot. Done/skipped history is left
+// alone so past posts keep their record.
+func (s *PlannerService) ClearPlatformDraft(noteID, platform string) (PlanState, error) {
+	platform, err := normalizePlatform(platform)
+	if err != nil {
+		return PlanState{}, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	root, err := s.notes.publishRoot()
+	if err != nil {
+		return PlanState{}, err
+	}
+	unlock, err := lockNotesDir(root)
+	if err != nil {
+		return PlanState{}, err
+	}
+	defer unlock()
+	if err := requireNote(root, noteID); err != nil {
+		return PlanState{}, err
+	}
+	state, _, err := readPlanState(root, noteID)
+	if err != nil {
+		return PlanState{}, err
+	}
+	delete(state.Drafts, platform)
+	for i := range state.Slots {
+		slot := &state.Slots[i]
+		if slot.Status == slotScheduled && normalizePublishPlatform(slot.Platform) == platform {
+			slot.Rendition = nil
+		}
+	}
 	if err := writePlanState(root, state); err != nil {
 		return PlanState{}, err
 	}
@@ -547,14 +646,10 @@ func (s *PlannerService) SlotText(noteID, slotID string) (SlotText, error) {
 		return SlotText{}, fmt.Errorf("slot %q not found", slotID)
 	}
 	if slot.Rendition != nil {
-		return SlotText{
-			Title:     slot.Rendition.Title,
-			Text:      slot.Rendition.Text,
-			Parts:     slot.Rendition.Parts,
-			Body:      slot.Rendition.Body,
-			Tags:      slot.Rendition.Tags,
-			Canonical: slot.Rendition.Canonical,
-		}, nil
+		return renditionSlotText(slot.Rendition), nil
+	}
+	if r := state.Drafts[normalizePublishPlatform(slot.Platform)]; r != nil {
+		return renditionSlotText(r), nil
 	}
 
 	note, err := s.notes.Get(noteID)
@@ -572,6 +667,17 @@ func (s *PlannerService) SlotText(noteID, slotID string) (SlotText, error) {
 		Body:  draft.Body,
 		Tags:  draft.Tags,
 	}, nil
+}
+
+func renditionSlotText(r *Rendition) SlotText {
+	return SlotText{
+		Title:     r.Title,
+		Text:      r.Text,
+		Parts:     r.Parts,
+		Body:      r.Body,
+		Tags:      r.Tags,
+		Canonical: r.Canonical,
+	}
 }
 
 // Due returns usable scheduled slots at or before now that have not been
@@ -696,7 +802,11 @@ func queueItemFor(n scannedNote, slot PlanSlot, status string) QueueItem {
 	title := n.title
 	preview := ""
 	stale := false
-	if r := slot.Rendition; r != nil {
+	r := slot.Rendition
+	if r == nil {
+		r = n.plan.Drafts[normalizePublishPlatform(slot.Platform)]
+	}
+	if r != nil {
 		if r.Title != "" {
 			title = r.Title
 		}
