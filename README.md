@@ -325,7 +325,16 @@ npm run build     # rebuild embedded frontend assets
 ```
 
 After changing an exported Go service or model, regenerate the typed bindings
-with `wails3 generate bindings -ts` from the repository root.
+with `wails3 generate bindings -ts -i` from the repository root, matching the
+`generate:bindings` task.
+
+The `wails3` CLI must be built with the same Go toolchain as the `go` command it
+invokes. If binding generation prints warnings about source-processing packages,
+unknown stdlib fields, or “is not a type”, rebuild the CLI with the local Go:
+
+```bash
+go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0
+```
 
 ## Releases
 
