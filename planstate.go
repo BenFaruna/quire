@@ -68,6 +68,9 @@ type PlanState struct {
 	Stage   string     `json:"stage,omitempty"` // idea | drafting | ready; empty means derive
 	Updated int64      `json:"updated"`
 	Slots   []PlanSlot `json:"slots"`
+	// Drafts holds the last saved draft per platform, independent of whether a
+	// slot exists. Keyed by the canonical platform name.
+	Drafts map[string]*Rendition `json:"drafts,omitempty"`
 }
 
 func emptyPlanState(noteID string) PlanState {
@@ -75,6 +78,7 @@ func emptyPlanState(noteID string) PlanState {
 		Version: planStateVersion,
 		NoteID:  noteID,
 		Slots:   []PlanSlot{},
+		Drafts:  map[string]*Rendition{},
 	}
 }
 
@@ -108,6 +112,9 @@ func readPlanState(root, noteID string) (PlanState, bool, error) {
 	if state.Slots == nil {
 		state.Slots = []PlanSlot{}
 	}
+	if state.Drafts == nil {
+		state.Drafts = map[string]*Rendition{}
+	}
 	state.NoteID = noteID
 	if state.Version == 0 {
 		state.Version = planStateVersion
@@ -123,6 +130,9 @@ func writePlanState(root string, state PlanState) error {
 	state.Updated = time.Now().UnixMilli()
 	if state.Slots == nil {
 		state.Slots = []PlanSlot{}
+	}
+	if state.Drafts == nil {
+		state.Drafts = map[string]*Rendition{}
 	}
 
 	raw, err := json.MarshalIndent(state, "", "  ")

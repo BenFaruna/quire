@@ -413,6 +413,11 @@
                 <button type="button" role="tab" data-platform="hashnode" aria-selected="false">Hashnode</button>
             </div>
 
+            <div class="publish-view" id="publish-view" role="group" aria-label="Editor view">
+                <button type="button" data-view="edit" class="is-active">Edit</button>
+                <button type="button" data-view="preview">Preview</button>
+            </div>
+
             <div class="publish-social" id="publish-social">
                 <label class="publish-link">
                     <span>Link to include <em>(optional)</em></span>
@@ -502,6 +507,8 @@
                     </label>
                 </div>
             </div>
+
+            <div class="publish-preview" id="publish-preview" hidden></div>
 
             <ul class="publish-warnings" id="publish-warnings" hidden></ul>
             <p class="publish-notice" id="publish-notice" hidden></p>

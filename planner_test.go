@@ -400,3 +400,155 @@ func TestDueNotifiesOnceAndMarkNotifiedRevalidates(t *testing.T) {
 		t.Fatalf("stale markNotified suppressed the reminder: %+v", due)
 	}
 }
+
+func TestSavePlatformDraftWithoutSlot(t *testing.T) {
+	svc, root := newTestPlanner(t)
+	mustNote(t, root, "n1", "Title", "Body")
+	svc.now = func() time.Time { return time.UnixMilli(1234) }
+
+	state, err := svc.SavePlatformDraft("n1", "twitter", Rendition{Text: "edited post"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := state.Drafts[platformX]
+	if r == nil || r.Text != "edited post" {
+		t.Fatalf("draft not saved: %+v", state.Drafts)
+	}
+	if r.EditedAt != 1234 || r.SourceHash == "" {
+		t.Fatalf("metadata not filled: %+v", r)
+	}
+
+	// A reload from disk must keep the draft.
+	reloaded, err := svc.Plan("n1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Drafts[platformX] == nil || reloaded.Drafts[platformX].Text != "edited post" {
+		t.Fatalf("draft lost on reload: %+v", reloaded.Drafts)
+	}
+}
+
+func TestSavePlatformDraftMirrorsScheduledSlot(t *testing.T) {
+	svc, root := newTestPlanner(t)
+	mustNote(t, root, "n1", "Title", "Body")
+	state, err := svc.Schedule("n1", platformX, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slotID := state.Slots[0].ID
+
+	if _, err := svc.SavePlatformDraft("n1", platformX, Rendition{Parts: []string{"one", "two"}}); err != nil {
+		t.Fatal(err)
+	}
+	state, err = svc.Plan("n1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	slot, ok := findSlot(&state, slotID)
+	if !ok || slot.Rendition == nil {
+		t.Fatalf("slot rendition missing: %+v", state.Slots)
+	}
+	if len(slot.Rendition.Parts) != 2 {
+		t.Fatalf("slot rendition not mirrored: %+v", slot.Rendition)
+	}
+}
+
+func TestSaveRenditionMirrorsPlatformDraft(t *testing.T) {
+	svc, root := newTestPlanner(t)
+	mustNote(t, root, "n1", "Title", "Body")
+	state, err := svc.Schedule("n1", platformLinkedIn, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SaveRendition("n1", state.Slots[0].ID, Rendition{Text: "slot edit"}); err != nil {
+		t.Fatal(err)
+	}
+	state, err = svc.Plan("n1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Drafts[platformLinkedIn] == nil || state.Drafts[platformLinkedIn].Text != "slot edit" {
+		t.Fatalf("platform draft not mirrored: %+v", state.Drafts)
+	}
+}
+
+func TestClearPlatformDraft(t *testing.T) {
+	svc, root := newTestPlanner(t)
+	mustNote(t, root, "n1", "Title", "Body")
+	state, err := svc.Schedule("n1", platformX, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SavePlatformDraft("n1", platformX, Rendition{Text: "draft"}); err != nil {
+		t.Fatal(err)
+	}
+	state, err = svc.ClearPlatformDraft("n1", platformX)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Drafts[platformX] != nil {
+		t.Fatalf("draft not cleared: %+v", state.Drafts)
+	}
+	if state.Slots[0].Rendition != nil {
+		t.Fatalf("scheduled slot rendition not cleared: %+v", state.Slots[0])
+	}
+}
+
+func TestSlotTextUsesSavedPlatformDraft(t *testing.T) {
+	svc, root := newTestPlanner(t)
+	mustNote(t, root, "n1", "Title", "Body")
+	state, err := svc.Schedule("n1", platformX, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slotID := state.Slots[0].ID
+	if _, err := svc.ClearPlatformDraft("n1", platformX); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SavePlatformDraft("n1", platformX, Rendition{Parts: []string{"saved one", "saved two"}}); err != nil {
+		t.Fatal(err)
+	}
+	// Remove the slot mirror to prove SlotText falls back to the platform draft.
+	state, err = svc.Plan("n1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Slots[0].Rendition = nil
+	mustPlan(t, root, state)
+
+	text, err := svc.SlotText("n1", slotID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(text.Parts) != 2 || text.Parts[0] != "saved one" {
+		t.Fatalf("SlotText did not use platform draft: %+v", text)
+	}
+}
+
+func TestQueuePreviewUsesPlatformDraft(t *testing.T) {
+	svc, root := newTestPlanner(t)
+	mustNote(t, root, "n1", "Title", "Body")
+	svc.now = func() time.Time { return time.UnixMilli(1000) }
+	state, err := svc.Schedule("n1", platformX, 2000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SavePlatformDraft("n1", platformX, Rendition{Text: "saved preview"}); err != nil {
+		t.Fatal(err)
+	}
+	// Keep the draft but remove the slot mirror.
+	state, err = svc.Plan("n1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Slots[0].Rendition = nil
+	mustPlan(t, root, state)
+
+	items, err := svc.Queue(0, 0)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("queue = %+v err=%v", items, err)
+	}
+	if items[0].Preview != "saved preview" {
+		t.Fatalf("preview = %q", items[0].Preview)
+	}
+}

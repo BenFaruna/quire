@@ -30,6 +30,9 @@ document's leading `# Heading` — so they remain portable and readable outside 
   directly to dev.to and Hashnode. Social targets stay local (copy/intent URLs)
   and need no account; blog targets use an API key stored in the OS keychain.
   Per-note `<id>.publish.json` tracking lets you update or unlink a post later.
+  Drafts shaped for each platform are saved in the note's `<id>.plan.json`,
+  reopen with your edits intact, and can be read in a roomy **Preview** view
+  instead of the editor.
 - **Atomic saves** — notes are written to a temp file, fsynced, then renamed, so
   a crash mid-write cannot truncate a note.
 - **Home screen** — the app opens on a map of your categories, with quick
@@ -322,7 +325,16 @@ npm run build     # rebuild embedded frontend assets
 ```
 
 After changing an exported Go service or model, regenerate the typed bindings
-with `wails3 generate bindings -ts` from the repository root.
+with `wails3 generate bindings -ts -i` from the repository root, matching the
+`generate:bindings` task.
+
+The `wails3` CLI must be built with the same Go toolchain as the `go` command it
+invokes. If binding generation prints warnings about source-processing packages,
+unknown stdlib fields, or “is not a type”, rebuild the CLI with the local Go:
+
+```bash
+go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0
+```
 
 ## Releases
 

@@ -146,6 +146,12 @@ export interface PlanState {
     "stage"?: string;
     "updated": number;
     "slots": PlanSlot[] | null;
+
+    /**
+     * Drafts holds the last saved draft per platform, independent of whether a
+     * slot exists. Keyed by the canonical platform name.
+     */
+    "drafts"?: { [_ in string]?: Rendition | null } | null;
 }
 
 /**
